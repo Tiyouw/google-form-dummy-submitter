@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local data / secrets
+*.csv
+!examples/*.csv
+.env
+*.log
+form.html
+form_data.json
+submitted_rows_check_reference.csv
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
