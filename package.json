@@ -1,0 +1,42 @@
+{
+  "name": "gform-dummy",
+  "version": "1.0.0",
+  "description": "Submit dummy CSV responses to owned public Google Forms for QA/testing.",
+  "type": "module",
+  "bin": {
+    "gform-dummy": "./bin/gform-dummy.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --test && node --check bin/gform-dummy.js && node --check src/core.js"
+  },
+  "keywords": [
+    "google-forms",
+    "forms",
+    "csv",
+    "dummy-data",
+    "testing",
+    "qa",
+    "automation"
+  ],
+  "author": "Ahimsa Jenar Bramsaifstyo Kusuma <tio.rmx@gmail.com> (https://github.com/Tiyouw)",
+  "license": "MIT",
+  "homepage": "https://github.com/Tiyouw/google-form-dummy-submitter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tiyouw/google-form-dummy-submitter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tiyouw/google-form-dummy-submitter/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "examples/",
+    "README.md",
+    "LICENSE"
+  ]
+}

@@ -1,11 +1,28 @@
-# Google Form Dummy Submitter
+# gform-dummy
 
-Tool Python sederhana untuk mengisi **Google Form publik** menggunakan data dummy dari CSV.
+CLI Node.js untuk mengisi **Google Form publik** menggunakan data dummy dari CSV.
 
-Dibuat untuk kebutuhan **QA/testing form milik sendiri**: misalnya menguji alur response sheet, validasi pertanyaan, dashboard, pipeline analisis, atau demo.
+Dibuat untuk kebutuhan **QA/testing form milik sendiri**: uji response sheet, dashboard, pipeline analisis, demo, atau validasi form.
 
 > [!WARNING]
 > Gunakan hanya untuk Google Form yang kamu miliki atau kamu punya izin untuk mengetesnya. Jangan gunakan tool ini untuk memalsukan responden survei nyata atau membuat data dummy terlihat sebagai respons asli.
+
+---
+
+## Nama package
+
+Nama yang dipakai untuk versi npm CLI:
+
+```txt
+gform-dummy
+```
+
+Alasannya:
+
+- pendek dan mudah diketik;
+- command terminal juga sama: `gform-dummy`;
+- lebih mudah diingat dibanding nama panjang;
+- credit tetap ada di `author`, GitHub repo, dan README.
 
 ---
 
@@ -16,41 +33,56 @@ Dibuat untuk kebutuhan **QA/testing form milik sendiri**: misalnya menguji alur 
 - Membaca data dari CSV.
 - Validasi jumlah field, header CSV, field wajib, dan pilihan jawaban.
 - Mode default **dry-run**, jadi aman dicek dulu sebelum submit.
-- Mendukung submit bertahap: 1 row dulu, lalu sisanya.
+- Submit bertahap: 1 row test dulu, lalu sisanya.
 - Menangani banyak form multi-section dengan `pageHistory` penuh.
 - Menambahkan sentinel dan `partialResponse` agar direct POST lebih mirip submit dari browser.
+- Tidak membutuhkan dependency eksternal untuk versi Node CLI.
 
 ---
 
 ## Kebutuhan
 
-- Python 3.10+
+- Node.js 18+
 - Internet access
 - Google Form harus bisa diakses publik tanpa login
 - Tidak mendukung CAPTCHA, upload file, atau form yang wajib login Google
 
-Install dependency:
-
-```bash
-pip install -r requirements.txt
-```
-
-Atau tanpa clone repo:
-
-```bash
-pip install requests
-```
-
 ---
 
-## Instalasi
+## Install
+
+### Opsi 1 — Install dari GitHub sekarang
+
+Karena package belum dipublish ke npm registry, install dari GitHub dulu:
 
 ```bash
-git clone https://github.com/Tiyouw/google-form-dummy-submitter.git
-cd google-form-dummy-submitter
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+npm install -g github:Tiyouw/google-form-dummy-submitter
+```
+
+Cek:
+
+```bash
+gform-dummy --help
+```
+
+### Opsi 2 — Jalankan tanpa global install dari GitHub
+
+```bash
+npx github:Tiyouw/google-form-dummy-submitter --help
+```
+
+### Opsi 3 — Setelah publish ke npm registry nanti
+
+Kalau package `gform-dummy` sudah dipublish ke npm:
+
+```bash
+npm install -g gform-dummy
+```
+
+atau:
+
+```bash
+npx gform-dummy --help
 ```
 
 ---
@@ -79,6 +111,14 @@ Aturan penting:
 2-5 kali -> 2–5 kali
 ```
 
+Cara paling aman membuat template CSV:
+
+1. Isi Google Form sekali secara manual.
+2. Buka Google Sheet Responses.
+3. Export sebagai CSV.
+4. Pakai header CSV tersebut sebagai template.
+5. Isi data dummy di baris-baris berikutnya.
+
 ---
 
 ## Cara Pakai
@@ -88,7 +128,7 @@ Aturan penting:
 Dry-run hanya validasi dan preview payload. Tidak ada data yang dikirim.
 
 ```bash
-python google_form_dummy_submitter.py \
+gform-dummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --dry-run \
@@ -100,7 +140,7 @@ Output sukses kira-kira seperti ini:
 ```txt
 OK: 100 baris CSV valid.
 OK: 42 field Form cocok dengan 42 kolom CSV.
-OK: pageHistory yang dipakai: '0,1,2,3,4,5,6'.
+OK: pageHistory yang dipakai: "0,1,2,3,4,5,6".
 Mode: DRY RUN
 DRY row #1: ...
 Selesai.
@@ -111,7 +151,7 @@ Selesai.
 Submit satu row dulu agar kamu bisa cek di Google Sheet Responses apakah semua kolom, terutama kolom akhir, sudah terisi.
 
 ```bash
-python google_form_dummy_submitter.py \
+gform-dummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -123,7 +163,7 @@ python google_form_dummy_submitter.py \
 Opsional, tambahkan prefix agar row test mudah dicari:
 
 ```bash
-python google_form_dummy_submitter.py \
+gform-dummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -136,7 +176,7 @@ python google_form_dummy_submitter.py \
 Kalau row test sudah aman, submit dari row ke-2:
 
 ```bash
-python google_form_dummy_submitter.py \
+gform-dummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -148,7 +188,7 @@ python google_form_dummy_submitter.py \
 Kalau mau submit semua dari awal:
 
 ```bash
-python google_form_dummy_submitter.py \
+gform-dummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -165,16 +205,19 @@ python google_form_dummy_submitter.py \
 | `--form-url` | URL Google Form `/viewform`. Wajib. |
 | `--csv` | Path file CSV dummy. Wajib. |
 | `--dry-run` | Validasi saja, tidak submit. Default jika `--submit` tidak diberikan. |
-| `--submit` | Benar-benar submit data ke Google Form. |
+| `--submit` | Benar-benar submit response ke Google Form. |
 | `--limit` | Batasi jumlah row yang diproses. |
 | `--start` | Mulai dari row data tertentu, 1-based, tidak termasuk header. |
 | `--delay` | Delay dasar antar submit, default `0.8` detik. |
 | `--jitter` | Delay random tambahan, default `0.4` detik. |
-| `--encoding` | Encoding CSV, default `utf-8-sig`. |
+| `--encoding` | Encoding CSV, default `utf8`. |
+| `--timeout` | HTTP timeout dalam detik, default `30`. |
 | `--page-history` | Override manual `pageHistory`, contoh `0,1,2,3,4,5,6`. |
 | `--no-auto-page-history` | Matikan inferensi otomatis pageHistory. |
 | `--name-prefix` | Prefix untuk field pertama, berguna saat test 1 row. |
 | `--preview-rows` | Jumlah row preview saat dry-run. |
+| `--help` | Tampilkan bantuan. |
+| `--version` | Tampilkan versi. |
 
 ---
 
@@ -188,7 +231,7 @@ pageHistory=0
 
 Kalau direct POST hanya memakai `pageHistory=0`, Google kadang tetap mengembalikan halaman sukses, tetapi jawaban di section akhir bisa kosong/diabaikan.
 
-Script ini mencoba mengatasi dengan:
+Tool ini mencoba mengatasi dengan:
 
 1. Menghitung block section/title dari metadata form.
 2. Mengirim `pageHistory` penuh, misalnya:
@@ -205,7 +248,7 @@ Tetap lakukan verifikasi response sheet setelah submit 1 row test, terutama kolo
 Jika masih ada kolom akhir kosong, coba override manual:
 
 ```bash
-python google_form_dummy_submitter.py \
+gform-dummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --dry-run \
@@ -213,6 +256,31 @@ python google_form_dummy_submitter.py \
 ```
 
 Lalu submit dengan opsi yang sama.
+
+---
+
+## Development
+
+Clone repo:
+
+```bash
+git clone https://github.com/Tiyouw/google-form-dummy-submitter.git
+cd google-form-dummy-submitter
+npm test
+npm run check
+```
+
+Jalankan lokal tanpa install global:
+
+```bash
+node bin/gform-dummy.js --help
+```
+
+Cek isi package npm:
+
+```bash
+npm pack --dry-run
+```
 
 ---
 
@@ -256,7 +324,7 @@ Contoh jika opsi form adalah:
 Lebih dari 5 kali
 ```
 
-maka nilai CSV harus salah satu dari opsi tersebut. Script menoleransi dash umum seperti `2-5 kali` menjadi `2–5 kali`, tetapi tidak menebak opsi yang berbeda total.
+maka nilai CSV harus salah satu dari opsi tersebut. Tool menoleransi dash umum seperti `2-5 kali` menjadi `2–5 kali`, tetapi tidak menebak opsi yang berbeda total.
 
 ### HTTP `200` tapi data tidak masuk sempurna
 
@@ -264,7 +332,7 @@ Jangan hanya percaya HTTP `200`. Selalu cek Google Sheet Responses.
 
 Jika kolom akhir kosong:
 
-- Pastikan memakai versi script terbaru.
+- Pastikan memakai versi terbaru.
 - Cek output `pageHistory yang dipakai`.
 - Coba `--page-history` manual.
 - Submit 1 row test dulu dengan `--name-prefix TEST_`.
@@ -287,6 +355,12 @@ Jangan gunakan untuk:
 - menaikkan jumlah responden secara tidak jujur
 - spam form orang lain
 - melewati login/CAPTCHA/restriksi akses
+
+---
+
+## Legacy Python Script
+
+Repo ini awalnya dibuat dari script Python (`google_form_dummy_submitter.py`). Versi utama sekarang adalah Node.js CLI `gform-dummy` agar mudah dipasang via npm. Script Python tetap ada di repo sebagai referensi/legacy.
 
 ---
 

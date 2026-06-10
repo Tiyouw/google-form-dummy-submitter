@@ -10,6 +10,11 @@ __pycache__/
 venv/
 env/
 
+# Node / npm
+node_modules/
+npm-debug.log*
+*.tgz
+
 # Local data / secrets
 *.csv
 !examples/*.csv
