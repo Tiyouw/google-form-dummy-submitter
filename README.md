@@ -201,16 +201,23 @@ gformdummy \
 Kalau kamu tidak mau mengetik semua argumen manual, jalankan:
 
 ```bash
-gformdummy --interactive
+gformdummy
 ```
 
-Wizard akan meminta:
+Di terminal asli, command tanpa argumen akan langsung membuka **TUI mode**.
 
-1. URL Google Form
-2. path file CSV
-3. mode `dry-run` / `submit`
-4. limit baris
-5. konfirmasi sebelum lanjut
+Fitur sekarang:
+- step navigasi
+- input URL form
+- input path CSV
+- pilih mode
+- ringkasan sebelum lanjut
+
+Kalau kamu mau, kamu juga masih bisa jalankan:
+
+```bash
+gformdummy --interactive
+```
 
 Mode ini paling cocok untuk:
 - mencoba tool pertama kali
