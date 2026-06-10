@@ -8,15 +8,17 @@ import {
   submitOne,
   validateRows,
 } from '../src/core.js';
-import { runWizardMain } from '../src/interactive.js';
 import React from 'react';
 import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 
+const VERSION = '1.4.0';
+
 const HELP = `Google Form Dummy Submitter
 
 Usage:
-  gformdummy --form-url <GOOGLE_FORM_VIEWFORM_URL> --csv <data.csv> [options]
+  gformdummy [options]              Launch interactive TUI (default)
+  gformdummy --form-url URL --csv PATH [options]   CLI mode
 
 Safety:
   Default mode is dry-run. Add --submit to actually send responses.
@@ -39,23 +41,21 @@ Options:
   --no-auto-page-history Disable automatic pageHistory inference
   --name-prefix <text>   Prefix first field, useful for one-row test submits
   --preview-rows <n>     Number of rows to preview in dry-run (default: 3)
-  --interactive          Prompt missing values when possible (for real terminals)
   -h, --help             Show help
   -v, --version          Show version
 
 Examples:
+  gformdummy
   gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --dry-run --limit 3
   gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --limit 1 --delay 0 --jitter 0
   gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --start 2
-  gformdummy --interactive
 `;
 
 function parseArgs(argv) {
   const args = {
-    argvLength: argv.length,
     submit: false,
-    interactive: false,
     dryRun: false,
+    interactive: false,
     limit: null,
     start: 1,
     delay: 0.8,
@@ -66,6 +66,7 @@ function parseArgs(argv) {
     autoPageHistory: true,
     namePrefix: '',
     previewRows: 3,
+    argvLength: argv.length,
   };
 
   const needsValue = new Set([
@@ -103,9 +104,9 @@ function parseArgs(argv) {
     const token = argv[i];
     if (token === '--help' || token === '-h') args.help = true;
     else if (token === '--version' || token === '-v') args.version = true;
-    else if (token === '--interactive') args.interactive = true;
     else if (token === '--submit') args.submit = true;
     else if (token === '--dry-run') args.dryRun = true;
+    else if (token === '--interactive') args.interactive = true;
     else if (token === '--no-auto-page-history') args.autoPageHistory = false;
     else if (token.includes('=') && token.startsWith('--')) {
       const [key, ...rest] = token.split('=');
@@ -145,129 +146,122 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function runCore(config) {
+  const csvText = await readFile(config.csvPath, config.encoding);
+  const { headers: csvHeaders, rows } = parseCsv(csvText);
+  const { fields, hidden } = await fetchForm(config.formUrl, {
+    timeout: 30_000,
+    autoPageHistory: config.autoPageHistory !== false,
+  });
+
+  const pageHistory = config.pageHistoryOverride || hidden.__inferred_page_history || hidden.pageHistory;
+  const { selectedHeaders, normalizationCount } = validateRows(csvHeaders, rows, fields, hidden, {
+    pageHistory,
+  });
+
+  const startIndex = (config.start || 1) - 1;
+  let selectedRows = rows.slice(startIndex);
+  if (config.limit != null) selectedRows = selectedRows.slice(0, config.limit);
+
+  const messages = [];
+  messages.push(`OK: ${rows.length} baris CSV valid.`);
+  messages.push(`OK: ${fields.length} field Form cocok dengan ${selectedHeaders.length} kolom CSV.`);
+  messages.push(`OK: pageHistory yang dipakai: ${JSON.stringify(pageHistory ?? '<kosong>')}.`);
+  if (hidden.__page_history_note) messages.push(`Info: ${hidden.__page_history_note}.`);
+  if (normalizationCount) messages.push(`Catatan: ${normalizationCount} nilai opsi akan dinormalisasi.`);
+  messages.push(`Mode: ${config.submit ? 'SUBMIT' : 'DRY RUN'}`);
+  messages.push(`Action URL: ${hidden.__action_url}`);
+  messages.push(`Baris diproses: ${startIndex + 1} sampai ${startIndex + selectedRows.length} (${selectedRows.length} baris)`);
+
+  let failures = 0;
+  for (let offset = 0; offset < selectedRows.length; offset += 1) {
+    const rowNumber = startIndex + 1 + offset;
+    const row = selectedRows[offset];
+    const { payload, notes } = buildPayload(row, selectedHeaders, fields, hidden, {
+      pageHistory,
+    });
+    const name = row[selectedHeaders[0]]?.trim?.() ?? '';
+
+    if (!config.submit) {
+      if (offset < 3) {
+        const firstKeys = fields.slice(0, 5).map((field) => field.entryName);
+        const lastKeys = fields.slice(Math.max(0, fields.length - 2)).map((field) => field.entryName);
+        const preview = Object.fromEntries([...new Set([...firstKeys, ...lastKeys])].map((key) => [key, payload[key]]));
+        messages.push(`DRY row #${rowNumber}: ${JSON.stringify(name)} preview=${JSON.stringify(preview)}`);
+        if (notes.length) messages.push(`  normalisasi: ${JSON.stringify(notes.slice(0, 3))}`);
+      }
+      continue;
+    }
+
+    const result = await submitOne(hidden.__action_url, payload, config.formUrl, { timeout: 30_000 });
+    if (result.ok) {
+      messages.push(`OK submit row #${rowNumber}: ${JSON.stringify(name)} status=${result.status}`);
+    } else {
+      failures += 1;
+      messages.push(`FAIL submit row #${rowNumber}: ${JSON.stringify(name)} status=${result.status}`);
+      break;
+    }
+
+    await sleep(800 + Math.random() * 400);
+  }
+
+  if (config.submit && failures) {
+    messages.push(`Selesai dengan kegagalan: ${failures}`);
+    return { ok: false, message: messages.join('\n') };
+  }
+
+  messages.push('Selesai.');
+  return { ok: true, message: messages.join('\n') };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+
   if (args.help) {
     console.log(HELP);
     return 0;
   }
   if (args.version) {
-    console.log('1.3.0');
+    console.log(VERSION);
     return 0;
   }
 
-  const hasExplicitAction = args.argvLength > 0;
-  if (!hasExplicitAction) {
+  const shouldLaunchTui = args.argvLength === 0 || (args.interactive && !args.formUrl && !args.csv);
+  if (shouldLaunchTui) {
     if (!process.stdin.isTTY) {
       console.error('Non-interactive environment detected. Open the tool in a real terminal to use TUI mode, or pass values directly:');
       console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
       return 1;
     }
 
-    render(React.createElement(GformTui));
+    const { waitUntilExit } = render(
+      React.createElement(GformTui, {
+        onComplete: async (config) => {
+          if (!config || !config.confirm) return null;
+          return runCore(config);
+        },
+      }),
+    );
+    await waitUntilExit();
     return 0;
-  }
-
-  if (args.interactive) {
-    if (!process.stdin.isTTY) {
-      console.error('Non-interactive environment detected. Run interactively in a real terminal, or pass the missing values directly:');
-      console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
-      return 1;
-    }
-
-    const wizard = await runWizardMain({
-      defaultFormUrl: args.formUrl ?? '',
-      defaultCsvPath: args.csv ?? '',
-      defaultMode: args.submit ? 'submit' : 'dry-run',
-      defaultLimit: args.limit != null ? String(args.limit) : '',
-    });
-
-    if (!wizard.confirm) return 0;
-
-    args.formUrl = args.formUrl || wizard.formUrl;
-    args.csv = args.csv || wizard.csvPath;
-    args.encoding = args.encoding || wizard.encoding;
-    args.autoPageHistory = wizard.autoPageHistory;
-    args.pageHistory = args.pageHistory || wizard.pageHistoryOverride || null;
-    args.limit = args.limit ?? wizard.limit;
-    args.submit = wizard.submit;
-    if (!args.submit) args.dryRun = true;
   }
 
   validateArgs(args);
 
-  const csvText = await readFile(args.csv, args.encoding);
-  const { headers: csvHeaders, rows } = parseCsv(csvText);
-  const { fields, hidden } = await fetchForm(args.formUrl, {
-    timeout: args.timeout * 1000,
+  const config = {
+    formUrl: args.formUrl,
+    csvPath: args.csv,
+    submit: args.submit,
+    limit: args.limit,
+    encoding: args.encoding,
     autoPageHistory: args.autoPageHistory,
-  });
+    pageHistoryOverride: args.pageHistory,
+    start: args.start,
+  };
 
-  const pageHistory = args.pageHistory || hidden.__inferred_page_history || hidden.pageHistory;
-  const { selectedHeaders, normalizationCount } = validateRows(csvHeaders, rows, fields, hidden, {
-    pageHistory,
-    namePrefix: args.namePrefix,
-  });
-
-  console.log(`OK: ${rows.length} baris CSV valid.`);
-  console.log(`OK: ${fields.length} field Form cocok dengan ${selectedHeaders.length} kolom CSV.`);
-  console.log(`OK: pageHistory yang dipakai: ${JSON.stringify(pageHistory ?? '<kosong>')}.`);
-  if (hidden.__page_history_note) console.log(`Info: ${hidden.__page_history_note}.`);
-  if (normalizationCount) console.log(`Catatan: ${normalizationCount} nilai opsi akan dinormalisasi agar cocok dengan opsi Form.`);
-
-  const startIndex = args.start - 1;
-  let selectedRows = rows.slice(startIndex);
-  if (args.limit !== null) selectedRows = selectedRows.slice(0, args.limit);
-  if (!selectedRows.length) {
-    console.log('Tidak ada baris yang diproses setelah --start/--limit.');
-    return 0;
-  }
-
-  console.log(`Mode: ${args.submit ? 'SUBMIT' : 'DRY RUN'}`);
-  console.log(`Action URL: ${hidden.__action_url}`);
-  console.log(`Baris diproses: ${args.start} sampai ${args.start + selectedRows.length - 1} (${selectedRows.length} baris)`);
-
-  let failures = 0;
-  for (let offset = 0; offset < selectedRows.length; offset += 1) {
-    const rowNumber = args.start + offset;
-    const row = selectedRows[offset];
-    const { payload, notes } = buildPayload(row, selectedHeaders, fields, hidden, {
-      pageHistory,
-      namePrefix: args.namePrefix,
-    });
-    const name = row[selectedHeaders[0]]?.trim?.() ?? '';
-    const displayName = args.namePrefix ? `${args.namePrefix}${name}` : name;
-
-    if (!args.submit) {
-      if (offset < args.previewRows) {
-        const firstKeys = fields.slice(0, 5).map((field) => field.entryName);
-        const lastKeys = fields.slice(Math.max(0, fields.length - 2)).map((field) => field.entryName);
-        const preview = Object.fromEntries([...new Set([...firstKeys, ...lastKeys])].map((key) => [key, payload[key]]));
-        console.log(`DRY row #${rowNumber}: ${JSON.stringify(displayName)} preview=${JSON.stringify(preview)}`);
-        if (notes.length) console.log(`  normalisasi: ${JSON.stringify(notes.slice(0, 3))}`);
-      }
-      continue;
-    }
-
-    const result = await submitOne(hidden.__action_url, payload, args.formUrl, { timeout: args.timeout * 1000 });
-    if (result.ok) {
-      console.log(`OK submit row #${rowNumber}: ${JSON.stringify(displayName)} status=${result.status}`);
-    } else {
-      failures += 1;
-      console.error(`FAIL submit row #${rowNumber}: ${JSON.stringify(displayName)} status=${result.status} snippet=${JSON.stringify(result.snippet)}`);
-      break;
-    }
-
-    await sleep((args.delay + Math.random() * args.jitter) * 1000);
-  }
-
-  if (args.submit && failures) {
-    console.error(`Selesai dengan kegagalan: ${failures}`);
-    return 2;
-  }
-
-  console.log('Selesai.');
-  return 0;
+  const result = await runCore(config);
+  console.log(result.message);
+  return result.ok ? 0 : 2;
 }
 
 main().then((code) => {

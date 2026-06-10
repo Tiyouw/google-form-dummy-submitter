@@ -1,6 +1,6 @@
 # gformdummy
 
-CLI Node.js untuk mengisi **Google Form publik** menggunakan data dummy dari CSV.
+TUI & CLI untuk mengisi **Google Form publik** menggunakan data dummy dari CSV.
 
 Dibuat untuk kebutuhan **QA/testing form milik sendiri**: uji response sheet, dashboard, pipeline analisis, demo, atau validasi form.
 
@@ -9,123 +9,41 @@ Dibuat untuk kebutuhan **QA/testing form milik sendiri**: uji response sheet, da
 
 ---
 
-## Nama package
-
-Nama yang dipakai untuk versi npm CLI:
-
-```txt
-gformdummy
-```
-
-Alasannya:
-
-- pendek dan mudah diketik;
-- command terminal juga sama: `gformdummy`;
-- lebih mudah diingat dibanding nama panjang;
-- credit tetap ada di `author`, GitHub repo, dan README.
-
----
-
-## Fitur
-
-- Membaca pertanyaan Google Form langsung dari URL `/viewform`.
-- Mengambil otomatis `entry.<id>` Google Forms.
-- Membaca data dari CSV.
-- Validasi jumlah field, header CSV, field wajib, dan pilihan jawaban.
-- Mode default **dry-run**, jadi aman dicek dulu sebelum submit.
-- Submit bertahap: 1 row test dulu, lalu sisanya.
-- Menangani banyak form multi-section dengan `pageHistory` penuh.
-- Menambahkan sentinel dan `partialResponse` agar direct POST lebih mirip submit dari browser.
-- Tidak membutuhkan dependency eksternal untuk versi Node CLI.
-
----
-
-## Kebutuhan
-
-- Node.js 18+
-- Internet access
-- Google Form harus bisa diakses publik tanpa login
-- Tidak mendukung CAPTCHA, upload file, atau form yang wajib login Google
-
----
-
 ## Install
-
-### Opsi 1 — Install dari GitHub sekarang
-
-Karena package belum dipublish ke npm registry, install dari GitHub dulu:
-
-```bash
-npm install -g github:Tiyouw/google-form-dummy-submitter
-```
-
-Cek:
-
-```bash
-gformdummy --help
-```
-
-### Opsi 2 — Jalankan tanpa global install dari GitHub
-
-```bash
-npx github:Tiyouw/google-form-dummy-submitter --help
-```
-
-### Opsi 3 — Setelah publish ke npm registry nanti
-
-Kalau package `gformdummy` sudah dipublish ke npm:
 
 ```bash
 npm install -g gformdummy
 ```
 
-atau:
+Atau tanpa install global:
 
 ```bash
-npx gformdummy --help
+npx gformdummy
 ```
 
 ---
 
-## Format CSV
+## Quick Start
 
-CSV harus memiliki header yang sesuai dengan pertanyaan Google Form.
+### TUI Mode (default)
 
-Contoh sederhana:
+Cukup jalankan tanpa argumen:
 
-```csv
-Nama,Umur,Jenis Kelamin,Berapa kali Anda pernah mengakses website iPlant.id?
-Tester A,21,Laki - laki,1 kali
-Tester B,22,Perempuan,2-5 kali
+```bash
+gformdummy
 ```
 
-Aturan penting:
+TUI akan terbuka dengan:
+- ASCII art header
+- step navigasi (URL → CSV → Mode → Options → Confirm)
+- text input sungguhan yang bisa diketik dan diedit
+- pilih mode dry-run / submit
+- review sebelum menjalankan
+- hasil langsung di terminal
 
-1. Urutan kolom CSV harus sama dengan urutan pertanyaan form.
-2. Header CSV harus sama dengan judul pertanyaan form, tetapi script menoleransi perbedaan whitespace, NBSP, dan jenis dash.
-3. Jika CSV hasil export Google Forms memiliki kolom awal `Timestamp` / `Stempel waktu`, script akan mengabaikannya otomatis.
-4. Untuk pilihan jawaban, nilai CSV harus cocok dengan opsi form.
-5. Perbedaan dash umum bisa dinormalisasi otomatis, misalnya:
+### CLI Mode
 
-```txt
-2-5 kali -> 2–5 kali
-```
-
-Cara paling aman membuat template CSV:
-
-1. Isi Google Form sekali secara manual.
-2. Buka Google Sheet Responses.
-3. Export sebagai CSV.
-4. Pakai header CSV tersebut sebagai template.
-5. Isi data dummy di baris-baris berikutnya.
-
----
-
-## Cara Pakai
-
-### 1. Dry-run dulu
-
-Dry-run hanya validasi dan preview payload. Tidak ada data yang dikirim.
+Langsung dari argumen:
 
 ```bash
 gformdummy \
@@ -135,95 +53,45 @@ gformdummy \
   --limit 3
 ```
 
-Output sukses kira-kira seperti ini:
-
-```txt
-OK: 100 baris CSV valid.
-OK: 42 field Form cocok dengan 42 kolom CSV.
-OK: pageHistory yang dipakai: "0,1,2,3,4,5,6".
-Mode: DRY RUN
-DRY row #1: ...
-Selesai.
-```
-
-### 2. Submit 1 row test
-
-Submit satu row dulu agar kamu bisa cek di Google Sheet Responses apakah semua kolom, terutama kolom akhir, sudah terisi.
+Submit 1 row test:
 
 ```bash
 gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
-  --limit 1 \
-  --delay 0 \
-  --jitter 0
+  --limit 1
 ```
 
-Opsional, tambahkan prefix agar row test mudah dicari:
+---
 
-```bash
-gformdummy \
-  --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
-  --csv data_dummy.csv \
-  --submit \
-  --limit 1 \
-  --name-prefix 'TEST_'
+## Fitur
+
+- **TUI interaktif** dengan ASCII art dashboard
+- **Text input** sungguhan — bisa diketik, diedit, dihapus
+- **Step navigasi** — URL → CSV → Mode → Options → Confirm
+- **Mode default dry-run** — aman, tidak submit tanpa konfirmasi
+- **Auto pageHistory** — menangani form multi-section
+- **Normalisasi opsi** — toleransi dash/spasi otomatis
+- **No external API** — semua proses lokal
+
+---
+
+## Format CSV
+
+CSV harus punya header sesuai pertanyaan form.
+
+```csv
+Nama,Umur,Jenis Kelamin
+Tester A,21,Laki - laki
+Tester B,22,Perempuan
 ```
 
-### 3. Submit sisa row
-
-Kalau row test sudah aman, submit dari row ke-2:
-
-```bash
-gformdummy \
-  --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
-  --csv data_dummy.csv \
-  --submit \
-  --start 2 \
-  --delay 0.35 \
-  --jitter 0.25
-```
-
-Kalau mau submit semua dari awal:
-
-```bash
-gformdummy \
-  --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
-  --csv data_dummy.csv \
-  --submit \
-  --delay 0.35 \
-  --jitter 0.25
-```
-
-### Mode interaktif
-
-Kalau kamu tidak mau mengetik semua argumen manual, jalankan:
-
-```bash
-gformdummy
-```
-
-Di terminal asli, command tanpa argumen akan langsung membuka **TUI mode**.
-
-Fitur sekarang:
-- step navigasi
-- input URL form
-- input path CSV
-- pilih mode
-- ringkasan sebelum lanjut
-
-Kalau kamu mau, kamu juga masih bisa jalankan:
-
-```bash
-gformdummy --interactive
-```
-
-Mode ini paling cocok untuk:
-- mencoba tool pertama kali
-- mengurangi typo
-- user non-teknis
-- quick run tanpa menghafal opsi
+Tips paling aman:
+1. Isi form sekali manual
+2. Export response ke CSV
+3. Pakai header CSV sebagai template
+4. Isi data dummy di bawahnya
 
 ---
 
@@ -231,190 +99,76 @@ Mode ini paling cocok untuk:
 
 | Opsi | Keterangan |
 |---|---|
-| `--form-url` | URL Google Form `/viewform`. Wajib. |
-| `--csv` | Path file CSV dummy. Wajib. |
-| `--dry-run` | Validasi saja, tidak submit. Default jika `--submit` tidak diberikan. |
-| `--submit` | Benar-benar submit response ke Google Form. |
-| `--limit` | Batasi jumlah row yang diproses. |
-| `--start` | Mulai dari row data tertentu, 1-based, tidak termasuk header. |
-| `--delay` | Delay dasar antar submit, default `0.8` detik. |
-| `--jitter` | Delay random tambahan, default `0.4` detik. |
+| `--form-url` | URL Google Form `/viewform`. Wajib untuk CLI mode. |
+| `--csv` | Path file CSV dummy. Wajib untuk CLI mode. |
+| `--dry-run` | Validasi saja, tidak submit. Default. |
+| `--submit` | Submit response ke Google Form. |
+| `--limit` | Batasi jumlah row. |
+| `--start` | Mulai dari row tertentu, 1-based. |
+| `--delay` | Delay antar submit, default `0.8` detik. |
+| `--jitter` | Random delay tambahan, default `0.4` detik. |
 | `--encoding` | Encoding CSV, default `utf8`. |
-| `--timeout` | HTTP timeout dalam detik, default `30`. |
-| `--page-history` | Override manual `pageHistory`, contoh `0,1,2,3,4,5,6`. |
-| `--no-auto-page-history` | Matikan inferensi otomatis pageHistory. |
-| `--name-prefix` | Prefix untuk field pertama, berguna saat test 1 row. |
-| `--preview-rows` | Jumlah row preview saat dry-run. |
-| `--interactive` | Jalankan mode interaktif: minta input yang kurang dan cocokkan CSV/preview sebelum submit. |
-| `--help` | Tampilkan bantuan. |
-| `--version` | Tampilkan versi. |
+| `--timeout` | HTTP timeout, default `30` detik. |
+| `--page-history` | Override manual pageHistory. |
+| `--no-auto-page-history` | Matikan inferensi pageHistory. |
+| `--name-prefix` | Prefix field pertama. |
+| `--preview-rows` | Jumlah preview saat dry-run. |
+| `-h, --help` | Bantuan. |
+| `-v, --version` | Versi. |
 
 ---
 
-## Tentang `pageHistory` dan form multi-section
+## Tentang `pageHistory`
 
-Google Form multi-section bisa punya hidden field:
+Form multi-section punya hidden field `pageHistory`. Tool ini otomatis menghitung section dan mengirim pageHistory penuh.
 
-```txt
-pageHistory=0
-```
-
-Kalau direct POST hanya memakai `pageHistory=0`, Google kadang tetap mengembalikan halaman sukses, tetapi jawaban di section akhir bisa kosong/diabaikan.
-
-Tool ini mencoba mengatasi dengan:
-
-1. Menghitung block section/title dari metadata form.
-2. Mengirim `pageHistory` penuh, misalnya:
-
-```txt
-0,1,2,3,4,5,6
-```
-
-3. Mengirim sentinel untuk field pilihan/skala.
-4. Membuat `partialResponse` dari semua jawaban.
-
-Tetap lakukan verifikasi response sheet setelah submit 1 row test, terutama kolom-kolom terakhir.
-
-Jika masih ada kolom akhir kosong, coba override manual:
-
-```bash
-gformdummy \
-  --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
-  --csv data_dummy.csv \
-  --dry-run \
-  --page-history '0,1,2,3,4,5,6'
-```
-
-Lalu submit dengan opsi yang sama.
-
----
-
-## Development
-
-Clone repo:
-
-```bash
-git clone https://github.com/Tiyouw/google-form-dummy-submitter.git
-cd google-form-dummy-submitter
-npm test
-npm run check
-```
-
-Jalankan lokal tanpa install global:
-
-```bash
-node bin/gformdummy.js --help
-```
-
-Cek isi package npm:
-
-```bash
-npm pack --dry-run
-```
-
-### Upgrade path
-
-Rencana UX bertahap:
-
-1. **Inquirer first**
-   - tambah wizard interaktif sederhana
-   - minta URL, CSV, mode, limit
-   - cocokkan CSV sebelum run
-   - minta konfirmasi sebelum submit
-
-2. **Ink later**
-   - kalau butuh tampilan lebih kaya
-   - spinner, layout, live preview
-   - lebih mirip modern CLI experience
-
-Saat ini base CLI sudah siap:
-- argumen lengkap
-- test suite jalan
-- `--interactive` tersedia
-- bisa dimulai dari Inquirer tanpa mengubah core terlalu besar
+Jika kolom akhir kosong setelah submit:
+1. Cek output `pageHistory yang dipakai`
+2. Coba override manual: `--page-history '0,1,2,3,4,5,6'`
+3. Submit 1 row test dulu
 
 ---
 
 ## Troubleshooting
 
 ### `Tidak menemukan FB_PUBLIC_LOAD_DATA_`
-
-Kemungkinan:
-
-- URL bukan `/viewform`
-- Form wajib login
-- Form tidak publik
-- Google mengubah struktur HTML
-
-Pastikan URL seperti ini:
-
-```txt
-https://docs.google.com/forms/d/e/FORM_ID/viewform
-```
+- Pastikan URL adalah `/viewform`
+- Form harus publik dan tidak butuh login
 
 ### `Header CSV tidak cocok`
-
-Pastikan header CSV sama dengan pertanyaan form dan urutannya sama.
-
-Cara paling mudah:
-
-1. Buat 1 response manual di form.
-2. Export response ke CSV.
-3. Pakai header CSV tersebut sebagai template.
-4. Isi data dummy di bawahnya.
+- Header CSV harus sama dengan judul pertanyaan form
+- Urutan harus sama
 
 ### `Nilai opsi tidak valid`
+- Nilai CSV harus cocok dengan opsi form
+- Tool toleransi dash: `2-5 kali` → `2–5 kali`
 
-Nilai CSV harus cocok dengan opsi di form.
-
-Contoh jika opsi form adalah:
-
-```txt
-1 kali
-2–5 kali
-Lebih dari 5 kali
+### Windows: `gformdummy is not recognized`
+```bash
+npm install -g gformdummy
 ```
-
-maka nilai CSV harus salah satu dari opsi tersebut. Tool menoleransi dash umum seperti `2-5 kali` menjadi `2–5 kali`, tetapi tidak menebak opsi yang berbeda total.
-
-### HTTP `200` tapi data tidak masuk sempurna
-
-Jangan hanya percaya HTTP `200`. Selalu cek Google Sheet Responses.
-
-Jika kolom akhir kosong:
-
-- Pastikan memakai versi terbaru.
-- Cek output `pageHistory yang dipakai`.
-- Coba `--page-history` manual.
-- Submit 1 row test dulu dengan `--name-prefix TEST_`.
+Kalau masih error, cek PATH:
+```bash
+npm config get prefix
+```
+Tambahkan folder tersebut ke PATH Windows.
 
 ---
 
-## Etika Penggunaan
+## Etika
 
-Tool ini dibuat untuk:
-
+Dibuat untuk:
 - QA/testing form sendiri
 - demo pipeline data
-- uji dashboard
 - validasi response sheet
-- simulasi load ringan dengan izin
 
 Jangan gunakan untuk:
-
-- memalsukan respon survei nyata
-- menaikkan jumlah responden secara tidak jujur
+- memalsukan respon survei
 - spam form orang lain
-- melewati login/CAPTCHA/restriksi akses
-
----
-
-## Legacy Python Script
-
-Repo ini awalnya dibuat dari script Python (`google_form_dummy_submitter.py`). Versi utama sekarang adalah Node.js CLI `gformdummy` agar mudah dipasang via npm. Script Python tetap ada di repo sebagai referensi/legacy.
+- melewati restriksi akses
 
 ---
 
 ## License
 
-MIT License. Lihat [LICENSE](LICENSE).
+MIT License.
