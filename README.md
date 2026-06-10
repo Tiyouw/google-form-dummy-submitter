@@ -196,6 +196,28 @@ gformdummy \
   --jitter 0.25
 ```
 
+### Mode interaktif
+
+Kalau kamu tidak mau mengetik semua argumen manual, jalankan:
+
+```bash
+gformdummy --interactive
+```
+
+Wizard akan meminta:
+
+1. URL Google Form
+2. path file CSV
+3. mode `dry-run` / `submit`
+4. limit baris
+5. konfirmasi sebelum lanjut
+
+Mode ini paling cocok untuk:
+- mencoba tool pertama kali
+- mengurangi typo
+- user non-teknis
+- quick run tanpa menghafal opsi
+
 ---
 
 ## Opsi CLI

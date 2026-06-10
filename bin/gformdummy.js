@@ -8,6 +8,7 @@ import {
   submitOne,
   validateRows,
 } from '../src/core.js';
+import { runWizardMain } from '../src/interactive.js';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -151,10 +152,30 @@ async function main() {
     return 0;
   }
 
-  if (args.interactive && !process.stdin.isTTY && (!args.formUrl || !args.csv)) {
-    console.error('Non-interactive environment detected. Run interactively in a real terminal, or pass the missing values directly:');
-    console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
-    return 1;
+  if (args.interactive) {
+    if (!process.stdin.isTTY) {
+      console.error('Non-interactive environment detected. Run interactively in a real terminal, or pass the missing values directly:');
+      console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
+      return 1;
+    }
+
+    const wizard = await runWizardMain({
+      defaultFormUrl: args.formUrl ?? '',
+      defaultCsvPath: args.csv ?? '',
+      defaultMode: args.submit ? 'submit' : 'dry-run',
+      defaultLimit: args.limit != null ? String(args.limit) : '',
+    });
+
+    if (!wizard.confirm) return 0;
+
+    args.formUrl = args.formUrl || wizard.formUrl;
+    args.csv = args.csv || wizard.csvPath;
+    args.encoding = args.encoding || wizard.encoding;
+    args.autoPageHistory = wizard.autoPageHistory;
+    args.pageHistory = args.pageHistory || wizard.pageHistoryOverride || null;
+    args.limit = args.limit ?? wizard.limit;
+    args.submit = wizard.submit;
+    if (!args.submit) args.dryRun = true;
   }
 
   validateArgs(args);
