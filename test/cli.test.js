@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
-const bin = join(root, 'bin', 'gform-dummy.js');
+const bin = join(root, 'bin', 'gformdummy.js');
 
 test('CLI --help prints usage and key options', () => {
   const result = spawnSync(process.execPath, [bin, '--help'], {

@@ -1,4 +1,4 @@
-# gform-dummy
+# gformdummy
 
 CLI Node.js untuk mengisi **Google Form publik** menggunakan data dummy dari CSV.
 
@@ -14,13 +14,13 @@ Dibuat untuk kebutuhan **QA/testing form milik sendiri**: uji response sheet, da
 Nama yang dipakai untuk versi npm CLI:
 
 ```txt
-gform-dummy
+gformdummy
 ```
 
 Alasannya:
 
 - pendek dan mudah diketik;
-- command terminal juga sama: `gform-dummy`;
+- command terminal juga sama: `gformdummy`;
 - lebih mudah diingat dibanding nama panjang;
 - credit tetap ada di `author`, GitHub repo, dan README.
 
@@ -62,7 +62,7 @@ npm install -g github:Tiyouw/google-form-dummy-submitter
 Cek:
 
 ```bash
-gform-dummy --help
+gformdummy --help
 ```
 
 ### Opsi 2 — Jalankan tanpa global install dari GitHub
@@ -73,16 +73,16 @@ npx github:Tiyouw/google-form-dummy-submitter --help
 
 ### Opsi 3 — Setelah publish ke npm registry nanti
 
-Kalau package `gform-dummy` sudah dipublish ke npm:
+Kalau package `gformdummy` sudah dipublish ke npm:
 
 ```bash
-npm install -g gform-dummy
+npm install -g gformdummy
 ```
 
 atau:
 
 ```bash
-npx gform-dummy --help
+npx gformdummy --help
 ```
 
 ---
@@ -128,7 +128,7 @@ Cara paling aman membuat template CSV:
 Dry-run hanya validasi dan preview payload. Tidak ada data yang dikirim.
 
 ```bash
-gform-dummy \
+gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --dry-run \
@@ -151,7 +151,7 @@ Selesai.
 Submit satu row dulu agar kamu bisa cek di Google Sheet Responses apakah semua kolom, terutama kolom akhir, sudah terisi.
 
 ```bash
-gform-dummy \
+gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -163,7 +163,7 @@ gform-dummy \
 Opsional, tambahkan prefix agar row test mudah dicari:
 
 ```bash
-gform-dummy \
+gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -176,7 +176,7 @@ gform-dummy \
 Kalau row test sudah aman, submit dari row ke-2:
 
 ```bash
-gform-dummy \
+gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -188,7 +188,7 @@ gform-dummy \
 Kalau mau submit semua dari awal:
 
 ```bash
-gform-dummy \
+gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --submit \
@@ -248,7 +248,7 @@ Tetap lakukan verifikasi response sheet setelah submit 1 row test, terutama kolo
 Jika masih ada kolom akhir kosong, coba override manual:
 
 ```bash
-gform-dummy \
+gformdummy \
   --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' \
   --csv data_dummy.csv \
   --dry-run \
@@ -273,7 +273,7 @@ npm run check
 Jalankan lokal tanpa install global:
 
 ```bash
-node bin/gform-dummy.js --help
+node bin/gformdummy.js --help
 ```
 
 Cek isi package npm:
@@ -360,7 +360,7 @@ Jangan gunakan untuk:
 
 ## Legacy Python Script
 
-Repo ini awalnya dibuat dari script Python (`google_form_dummy_submitter.py`). Versi utama sekarang adalah Node.js CLI `gform-dummy` agar mudah dipasang via npm. Script Python tetap ada di repo sebagai referensi/legacy.
+Repo ini awalnya dibuat dari script Python (`google_form_dummy_submitter.py`). Versi utama sekarang adalah Node.js CLI `gformdummy` agar mudah dipasang via npm. Script Python tetap ada di repo sebagai referensi/legacy.
 
 ---
 

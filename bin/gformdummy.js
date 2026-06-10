@@ -12,7 +12,7 @@ import {
 const HELP = `Google Form Dummy Submitter
 
 Usage:
-  gform-dummy --form-url <GOOGLE_FORM_VIEWFORM_URL> --csv <data.csv> [options]
+  gformdummy --form-url <GOOGLE_FORM_VIEWFORM_URL> --csv <data.csv> [options]
 
 Safety:
   Default mode is dry-run. Add --submit to actually send responses.
@@ -39,9 +39,9 @@ Options:
   -v, --version          Show version
 
 Examples:
-  gform-dummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --dry-run --limit 3
-  gform-dummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --limit 1 --delay 0 --jitter 0
-  gform-dummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --start 2
+  gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --dry-run --limit 3
+  gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --limit 1 --delay 0 --jitter 0
+  gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --start 2
 `;
 
 function parseArgs(argv) {
@@ -143,7 +143,7 @@ async function main() {
     return 0;
   }
   if (args.version) {
-    console.log('1.0.0');
+    console.log('1.0.1');
     return 0;
   }
 

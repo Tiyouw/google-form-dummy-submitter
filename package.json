@@ -1,14 +1,14 @@
 {
-  "name": "gform-dummy",
-  "version": "1.0.0",
+  "name": "gformdummy",
+  "version": "1.0.1",
   "description": "Submit dummy CSV responses to owned public Google Forms for QA/testing.",
   "type": "module",
   "bin": {
-    "gform-dummy": "./bin/gform-dummy.js"
+    "gformdummy": "./bin/gformdummy.js"
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --test && node --check bin/gform-dummy.js && node --check src/core.js"
+    "check": "node --test && node --check bin/gformdummy.js && node --check src/core.js"
   },
   "keywords": [
     "google-forms",
