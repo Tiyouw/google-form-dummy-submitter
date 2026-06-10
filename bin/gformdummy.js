@@ -9,6 +9,9 @@ import {
   validateRows,
 } from '../src/core.js';
 import { runWizardMain } from '../src/interactive.js';
+import React from 'react';
+import { render } from 'ink';
+import { GformTui } from '../src/tui/app.js';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -49,6 +52,7 @@ Examples:
 
 function parseArgs(argv) {
   const args = {
+    argvLength: argv.length,
     submit: false,
     interactive: false,
     dryRun: false,
@@ -148,7 +152,19 @@ async function main() {
     return 0;
   }
   if (args.version) {
-    console.log('1.2.0');
+    console.log('1.3.0');
+    return 0;
+  }
+
+  const hasExplicitAction = args.argvLength > 0;
+  if (!hasExplicitAction) {
+    if (!process.stdin.isTTY) {
+      console.error('Non-interactive environment detected. Open the tool in a real terminal to use TUI mode, or pass values directly:');
+      console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
+      return 1;
+    }
+
+    render(React.createElement(GformTui));
     return 0;
   }
 
