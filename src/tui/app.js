@@ -2,38 +2,50 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdin } from 'ink';
 import TextInput from 'ink-text-input';
 
-const VERSION = '1.4.0';
+const VERSION = '1.6.0';
 
 function Header() {
-  const art = [
-    '  ╔═══════════════════════════════════════════════════════════╗',
-    '  ║                                                           ║',
-    '  ║   ██████   ██████   ██████   ███    ███  ██████  ██   ██  ║',
-    '  ║   ██       ██  ██   ██  ██  ████  ████  ██  ██  ██   ██  ║',
-    '  ║   ██  ███  ██████   ██████  ██ ████ ██  ██████  ██   ██  ║',
-    '  ║   ██   ██  ██  ██   ██  ██  ██  ██  ██  ██  ██  ██   ██  ║',
-    '  ║   ██████   ██  ██   ██  ██  ██      ██  ██████   █████   ║',
-    '  ║                                                           ║',
-    '  ║           Google Form Dummy Submitter                     ║',
-    '  ║                                                           ║',
-    '  ╚═══════════════════════════════════════════════════════════╝',
+  const logoLines = [
+    '██████╗  ███████╗  ██████╗  ██████╗  ███╗   ███╗ ██████╗  ██╗   ██╗',
+    '██╔════╝  ██╔════╝ ██╔═══██╗ ██╔══██╗ ████╗ ████║ ██╔══██╗ ██║   ██║',
+    '██║  ███╗ █████╗   ██║   ██║ ██████╔╝ ██╔████╔██║ ██║  ██║ ██║   ██║',
+    '██║   ██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██║╚██╔╝██║ ██║  ██║ ██║   ██║',
+    '╚██████╔╝ ██║      ╚██████╔╝ ██║  ██║ ██║ ╚═╝ ██║ ██████╔╝ ╚██████╔╝',
+    ' ╚═════╝  ╚═╝       ╚═════╝  ╚═╝  ╚═╝ ╚═╝     ╚═╝ ╚═════╝   ╚═════╝',
   ];
+
+  const dummyLines = [
+    '██████╗  ██████╗ ███╗   ███╗███╗   ███╗██╗   ██╗',
+    '██╔══██╗██╔═══██╗████╗ ████║████╗ ████║╚██╗ ██╔╝',
+    '██║  ██║██║   ██║██╔████╔██║██╔████╔██║ ╚████╔╝ ',
+    '██║  ██║██║   ██║██║╚██╔╝██║██║╚██╔╝██║  ╚██╔╝  ',
+    '██████╔╝╚██████╔╝██║ ╚═╝ ██║██║ ╚═╝ ██║   ██║   ',
+    '╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝   ╚═╝   ',
+  ];
+
+  const colors = ['#FF6B6B', '#FF8E53', '#FFA07A', '#FFD93D', '#FF69B4', '#C084FC'];
+  const subtitleColors = ['#00D2FF', '#3A7BD5', '#6C5CE7'];
 
   return React.createElement(
     Box,
-    { flexDirection: 'column', marginBottom: 1 },
-    ...art.map((line, i) => {
-      const isBorder = i === 0 || i === art.length - 1 || i === 1 || i === 8 || i === 10;
-      const isTitle = i === 9;
-      return React.createElement(
-        Text,
-        { key: i, color: isBorder ? 'blue' : isTitle ? 'white' : 'cyan', bold: isTitle },
-        line,
-      );
-    }),
+    { flexDirection: 'column', marginBottom: 1, paddingLeft: 1 },
+    ...logoLines.map((line, i) =>
+      React.createElement(Text, { key: `logo-${i}`, color: colors[i], bold: true }, ` ${line}`),
+    ),
+    React.createElement(Box, { marginTop: 0 }),
+    ...dummyLines.map((line, i) =>
+      React.createElement(Text, { key: `dummy-${i}`, color: subtitleColors[i % subtitleColors.length], bold: true }, ` ${line}`),
+    ),
     React.createElement(
       Box,
-      { marginTop: 0, paddingLeft: 2 },
+      { marginTop: 1, paddingLeft: 1 },
+      React.createElement(Text, { color: '#FFD93D', bold: true }, 'Google Form Dummy Submitter'),
+      React.createElement(Text, { dimColor: true }, '  by '),
+      React.createElement(Text, { color: '#FF69B4', bold: true }, 'tiyoouw'),
+    ),
+    React.createElement(
+      Box,
+      { paddingLeft: 1 },
       React.createElement(Text, { dimColor: true }, `v${VERSION}`),
       React.createElement(Text, { dimColor: true }, '  ·  '),
       React.createElement(Text, { dimColor: true }, 'Press Ctrl+C to exit'),
