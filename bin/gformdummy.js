@@ -11,8 +11,9 @@ import {
 import React from 'react';
 import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
+import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -215,6 +216,7 @@ async function runCore(config) {
 }
 
 async function main() {
+  const updatePromise = checkForUpdate({ currentVersion: VERSION });
   const args = parseArgs(process.argv.slice(2));
 
   if (args.help) {
@@ -233,6 +235,11 @@ async function main() {
       console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
       return 1;
     }
+
+    updatePromise.then((update) => {
+      const msg = formatUpdateMessage(update);
+      if (msg) console.error(msg);
+    }).catch(() => {});
 
     const { waitUntilExit } = render(
       React.createElement(GformTui, {
@@ -261,6 +268,11 @@ async function main() {
 
   const result = await runCore(config);
   console.log(result.message);
+
+  const update = await updatePromise.catch(() => null);
+  const msg = formatUpdateMessage(update);
+  if (msg) console.error(msg);
+
   return result.ok ? 0 : 2;
 }
 
