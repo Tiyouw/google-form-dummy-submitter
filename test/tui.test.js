@@ -60,5 +60,5 @@ test('CLI --version prints version', () => {
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /1\.6\.0/);
+  assert.match(result.stdout, /1.7.0/);
 });

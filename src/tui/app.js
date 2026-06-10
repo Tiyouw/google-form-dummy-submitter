@@ -2,39 +2,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput, useApp, useStdin } from 'ink';
 import TextInput from 'ink-text-input';
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 function Header() {
-  const logoLines = [
-    '██████╗  ███████╗  ██████╗  ██████╗  ███╗   ███╗ ██████╗  ██╗   ██╗',
-    '██╔════╝  ██╔════╝ ██╔═══██╗ ██╔══██╗ ████╗ ████║ ██╔══██╗ ██║   ██║',
-    '██║  ███╗ █████╗   ██║   ██║ ██████╔╝ ██╔████╔██║ ██║  ██║ ██║   ██║',
-    '██║   ██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██║╚██╔╝██║ ██║  ██║ ██║   ██║',
-    '╚██████╔╝ ██║      ╚██████╔╝ ██║  ██║ ██║ ╚═╝ ██║ ██████╔╝ ╚██████╔╝',
-    ' ╚═════╝  ╚═╝       ╚═════╝  ╚═╝  ╚═╝ ╚═╝     ╚═╝ ╚═════╝   ╚═════╝',
+  const lines = [
+    ' ╔═╗ ╔═╗ ╔═╗ ╦═╗ ╔╦╗ ╔╦╗ ╦ ╦ ╔╦╗ ╔╦╗ ╦ ╦',
+    ' ║ ╦ ╠╣  ║ ║ ╠╦╝ ║║║  ║║ ║ ║ ║║║ ║║║ ╚╦╝',
+    ' ╚═╝ ╚   ╚═╝ ╩╚═ ╩ ╩ ═╩╝ ╚═╝ ╩ ╩ ╩ ╩  ╩',
   ];
 
-  const dummyLines = [
-    '██████╗  ██████╗ ███╗   ███╗███╗   ███╗██╗   ██╗',
-    '██╔══██╗██╔═══██╗████╗ ████║████╗ ████║╚██╗ ██╔╝',
-    '██║  ██║██║   ██║██╔████╔██║██╔████╔██║ ╚████╔╝ ',
-    '██║  ██║██║   ██║██║╚██╔╝██║██║╚██╔╝██║  ╚██╔╝  ',
-    '██████╔╝╚██████╔╝██║ ╚═╝ ██║██║ ╚═╝ ██║   ██║   ',
-    '╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝   ╚═╝   ',
-  ];
-
-  const colors = ['#FF6B6B', '#FF8E53', '#FFA07A', '#FFD93D', '#FF69B4', '#C084FC'];
-  const subtitleColors = ['#00D2FF', '#3A7BD5', '#6C5CE7'];
+  const colors = ['#FF6B6B', '#FFA07A', '#FFD93D'];
 
   return React.createElement(
     Box,
-    { flexDirection: 'column', marginBottom: 1, paddingLeft: 1 },
-    ...logoLines.map((line, i) =>
-      React.createElement(Text, { key: `logo-${i}`, color: colors[i], bold: true }, ` ${line}`),
-    ),
-    React.createElement(Box, { marginTop: 0 }),
-    ...dummyLines.map((line, i) =>
-      React.createElement(Text, { key: `dummy-${i}`, color: subtitleColors[i % subtitleColors.length], bold: true }, ` ${line}`),
+    { flexDirection: 'column', marginBottom: 0, paddingLeft: 2 },
+    ...lines.map((line, i) =>
+      React.createElement(Text, { key: i, color: colors[i], bold: true }, line),
     ),
     React.createElement(
       Box,
