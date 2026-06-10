@@ -216,6 +216,7 @@ gformdummy \
 | `--no-auto-page-history` | Matikan inferensi otomatis pageHistory. |
 | `--name-prefix` | Prefix untuk field pertama, berguna saat test 1 row. |
 | `--preview-rows` | Jumlah row preview saat dry-run. |
+| `--interactive` | Jalankan mode interaktif: minta input yang kurang dan cocokkan CSV/preview sebelum submit. |
 | `--help` | Tampilkan bantuan. |
 | `--version` | Tampilkan versi. |
 
@@ -281,6 +282,27 @@ Cek isi package npm:
 ```bash
 npm pack --dry-run
 ```
+
+### Upgrade path
+
+Rencana UX bertahap:
+
+1. **Inquirer first**
+   - tambah wizard interaktif sederhana
+   - minta URL, CSV, mode, limit
+   - cocokkan CSV sebelum run
+   - minta konfirmasi sebelum submit
+
+2. **Ink later**
+   - kalau butuh tampilan lebih kaya
+   - spinner, layout, live preview
+   - lebih mirip modern CLI experience
+
+Saat ini base CLI sudah siap:
+- argumen lengkap
+- test suite jalan
+- `--interactive` tersedia
+- bisa dimulai dari Inquirer tanpa mengubah core terlalu besar
 
 ---
 

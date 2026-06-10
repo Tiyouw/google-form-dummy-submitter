@@ -35,6 +35,7 @@ Options:
   --no-auto-page-history Disable automatic pageHistory inference
   --name-prefix <text>   Prefix first field, useful for one-row test submits
   --preview-rows <n>     Number of rows to preview in dry-run (default: 3)
+  --interactive          Prompt missing values when possible (for real terminals)
   -h, --help             Show help
   -v, --version          Show version
 
@@ -42,11 +43,13 @@ Examples:
   gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --dry-run --limit 3
   gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --limit 1 --delay 0 --jitter 0
   gformdummy --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --csv data.csv --submit --start 2
+  gformdummy --interactive
 `;
 
 function parseArgs(argv) {
   const args = {
     submit: false,
+    interactive: false,
     dryRun: false,
     limit: null,
     start: 1,
@@ -95,6 +98,7 @@ function parseArgs(argv) {
     const token = argv[i];
     if (token === '--help' || token === '-h') args.help = true;
     else if (token === '--version' || token === '-v') args.version = true;
+    else if (token === '--interactive') args.interactive = true;
     else if (token === '--submit') args.submit = true;
     else if (token === '--dry-run') args.dryRun = true;
     else if (token === '--no-auto-page-history') args.autoPageHistory = false;
@@ -143,8 +147,14 @@ async function main() {
     return 0;
   }
   if (args.version) {
-    console.log('1.0.1');
+    console.log('1.1.0');
     return 0;
+  }
+
+  if (args.interactive && !process.stdin.isTTY && (!args.formUrl || !args.csv)) {
+    console.error('Non-interactive environment detected. Run interactively in a real terminal, or pass the missing values directly:');
+    console.error('  gformdummy --form-url <URL> --csv <path> [--submit]');
+    return 1;
   }
 
   validateArgs(args);
