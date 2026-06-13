@@ -24,20 +24,17 @@ test('CLI default run without args in non-TTY prints guidance and exits 1', () =
   assert.match(result.stderr, /--csv/);
 });
 
-test('GformTui renders welcome header and step bar', () => {
+test('GformTui renders header with logo', () => {
   const { lastFrame } = render(React.createElement(GformTui));
   const output = lastFrame();
   assert.match(output, /Google Form Dummy Submitter/i);
-  assert.match(output, /Form URL/i);
-  assert.match(output, /CSV Path/i);
-  assert.match(output, /Mode/i);
+  assert.match(output, /tiyoouw/i);
 });
 
-test('GformTui shows URL input step initially', () => {
+test('GformTui renders version in header', () => {
   const { lastFrame } = render(React.createElement(GformTui));
   const output = lastFrame();
-  assert.match(output, /Google Form URL/i);
-  assert.match(output, /Masukkan URL public Google Form/i);
+  assert.match(output, /v1\.8\.0/);
 });
 
 test('CLI --help prints usage and key options', () => {
@@ -60,5 +57,5 @@ test('CLI --version prints version', () => {
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /1.7.0/);
+  assert.match(result.stdout, /1\.8\.0/);
 });
