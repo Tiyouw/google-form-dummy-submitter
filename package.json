@@ -1,10 +1,10 @@
 {
   "name": "gformdummy",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Submit dummy CSV responses to owned public Google Forms for QA/testing.",
   "type": "module",
   "bin": {
-    "gformdummy": "./bin/gformdummy.js"
+    "gformdummy": "bin/gformdummy.js"
   },
   "scripts": {
     "test": "node --test",

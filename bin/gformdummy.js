@@ -13,7 +13,7 @@ import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 
-const VERSION = '1.8.0';
+const VERSION = '1.9.0';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -42,6 +42,7 @@ Options:
   --no-auto-page-history Disable automatic pageHistory inference
   --name-prefix <text>   Prefix first field, useful for one-row test submits
   --preview-rows <n>     Number of rows to preview in dry-run (default: 3)
+  --theme <name>         UI theme: sunset, ocean, forest, purple, matrix, monokai
   -h, --help             Show help
   -v, --version          Show version
 
@@ -67,6 +68,7 @@ function parseArgs(argv) {
     autoPageHistory: true,
     namePrefix: '',
     previewRows: 3,
+    theme: 'sunset',
     argvLength: argv.length,
   };
 
@@ -82,6 +84,7 @@ function parseArgs(argv) {
     '--page-history',
     '--name-prefix',
     '--preview-rows',
+    '--theme',
   ]);
 
   function setValue(key, value) {
