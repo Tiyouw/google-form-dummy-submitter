@@ -13,7 +13,7 @@ import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -43,6 +43,7 @@ Options:
   --name-prefix <text>   Prefix first field, useful for one-row test submits
   --preview-rows <n>     Number of rows to preview in dry-run (default: 3)
   --theme <name>         UI theme: sunset, ocean, forest, purple, matrix, monokai
+  --no-header            CSV has no header row, use form field order
   -h, --help             Show help
   -v, --version          Show version
 
@@ -68,6 +69,7 @@ function parseArgs(argv) {
     autoPageHistory: true,
     namePrefix: '',
     previewRows: 3,
+    noHeader: false,
     theme: 'sunset',
     argvLength: argv.length,
   };
@@ -111,6 +113,7 @@ function parseArgs(argv) {
     else if (token === '--submit') args.submit = true;
     else if (token === '--dry-run') args.dryRun = true;
     else if (token === '--interactive') args.interactive = true;
+    else if (token === '--no-header') args.noHeader = true;
     else if (token === '--no-auto-page-history') args.autoPageHistory = false;
     else if (token.includes('=') && token.startsWith('--')) {
       const [key, ...rest] = token.split('=');
@@ -188,9 +191,8 @@ async function runCore(config) {
 
     if (!config.submit) {
       if (offset < 3) {
-        const firstKeys = fields.slice(0, 5).map((field) => field.entryName);
-        const lastKeys = fields.slice(Math.max(0, fields.length - 2)).map((field) => field.entryName);
-        const preview = Object.fromEntries([...new Set([...firstKeys, ...lastKeys])].map((key) => [key, payload[key]]));
+        const previewPairs = payload.filter(([k]) => k.startsWith('entry.')).slice(0, 7);
+        const preview = Object.fromEntries(previewPairs);
         messages.push(`DRY row #${rowNumber}: ${JSON.stringify(name)} preview=${JSON.stringify(preview)}`);
         if (notes.length) messages.push(`  normalisasi: ${JSON.stringify(notes.slice(0, 3))}`);
       }
@@ -264,6 +266,7 @@ async function main() {
     submit: args.submit,
     limit: args.limit,
     encoding: args.encoding,
+    noHeader: args.noHeader,
     autoPageHistory: args.autoPageHistory,
     pageHistoryOverride: args.pageHistory,
     start: args.start,

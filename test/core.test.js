@@ -98,7 +98,10 @@ test('buildPayload normalizes matching option values and includes final section 
     'Saya berniat menggunakan kembali': '4',
   };
 
-  const { payload, notes } = buildPayload(row, ['Nama', 'Akses website', 'Saya berniat menggunakan kembali'], fields, hidden);
+  const { payload: rawPayload, notes } = buildPayload(row, ['Nama', 'Akses website', 'Saya berniat menggunakan kembali'], fields, hidden);
+
+  // Convert pairs array to object for testing
+  const payload = Object.fromEntries(rawPayload);
 
   assert.equal(payload['entry.1001'], 'Tester A');
   assert.equal(payload['entry.1002'], '2–5 kali');

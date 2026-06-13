@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -76,7 +76,7 @@ async function validateCsv(path) {
       || firstCols.every(col => /^\d+$/.test(col.trim())); // all numbers
 
     const warning = looksLikeData
-      ? '⚠ Baris pertama terlihat seperti data, bukan header. Pastikan CSV punya header!'
+      ? '⚠ Baris pertama terlihat seperti data. Tekan n di step Options untuk mode --no-header'
       : null;
 
     return {
@@ -223,20 +223,52 @@ function Spinner({ text, theme }) {
 }
 
 function CsvPreview({ rows, theme }) {
+  const [showAll, setShowAll] = useState(false);
+  const [scrollOffset, setScrollOffset] = useState(0);
+
+  useInput(
+    (input, key) => {
+      if (key.upArrow) setScrollOffset(o => Math.max(0, o - 1));
+      else if (key.downArrow) setScrollOffset(o => Math.min(Math.max(0, rows.length - 2), o + 1));
+      else if (input === 'a' || input === 'A') setShowAll(!showAll);
+    },
+    { isActive: true },
+  );
+
   if (!rows || rows.length === 0) return null;
   const headers = rows[0]?.split(',') || [];
-  const dataRows = rows.slice(1);
+  const allDataRows = rows.slice(1);
+  const maxColWidth = 18;
+  const colWidths = headers.map((h, i) => {
+    const headerLen = Math.min(h.trim().length, maxColWidth);
+    const maxDataLen = allDataRows.reduce((max, row) => {
+      const val = (row.split(',')[i] || '').trim();
+      return Math.max(max, Math.min(val.length, maxColWidth));
+    }, 0);
+    return Math.max(headerLen, maxDataLen, 8) + 2;
+  });
+
+  const truncate = (s, w) => {
+    const t = s.trim();
+    return t.length > w - 2 ? t.slice(0, w - 3) + '…' : t.padEnd(w);
+  };
+
+  const visibleRows = showAll ? allDataRows : allDataRows.slice(scrollOffset, scrollOffset + 5);
+
   return React.createElement(
     Box, { flexDirection: 'column', paddingLeft: 2, marginTop: 1 },
-    React.createElement(Text, { bold: true, color: theme.warning }, '📋 Preview CSV:'),
-    React.createElement(Text, { dimColor: true }, headers.map(h => h.trim().slice(0, 15).padEnd(16)).join('')),
-    React.createElement(Text, { dimColor: true }, headers.map(() => '─'.repeat(16)).join('')),
-    ...dataRows.map((row, i) => {
-      const cols = row.split(',').map(c => c.trim().slice(0, 15).padEnd(16));
+    React.createElement(Text, { bold: true, color: theme.warning }, `📋 Preview CSV (${allDataRows.length} baris):`),
+    React.createElement(Text, { dimColor: true }, headers.map((h, i) => truncate(h, colWidths[i])).join('')),
+    React.createElement(Text, { dimColor: true }, colWidths.map(w => '─'.repeat(w)).join('')),
+    ...visibleRows.map((row, i) => {
+      const cols = row.split(',').map((c, j) => truncate(c, colWidths[j]));
       return React.createElement(Text, { key: i, color: 'white' }, cols.join(''));
     }),
-    dataRows.length < rows.length - 1
-      ? React.createElement(Text, { dimColor: true, italic: true }, `  ... dan ${rows.length - 1 - dataRows.length} baris lagi`)
+    !showAll && allDataRows.length > 5
+      ? React.createElement(Text, { dimColor: true, italic: true }, `  ... ${allDataRows.length - 5} baris lagi (↑↓ scroll · a untuk show all)`)
+      : null,
+    showAll
+      ? React.createElement(Text, { dimColor: true, italic: true }, '  a untuk collapse')
       : null,
   );
 }
@@ -331,6 +363,7 @@ export function GformTui({ onComplete }) {
   const [useFilePicker, setUseFilePicker] = useState(false);
   const [themeName, setThemeName] = useState('sunset');
   const [themeIndex, setThemeIndex] = useState(0);
+  const [noHeader, setNoHeader] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
 
   const theme = getTheme(themeName);
@@ -442,6 +475,7 @@ export function GformTui({ onComplete }) {
       if (step === 'options') {
         if (key.return) setStep('confirm');
         if (input === 'b') setStep('mode');
+        if (input === 'n' || input === 'N') setNoHeader(!noHeader);
       }
 
       if (step === 'confirm' && !isRunning && !result) {
@@ -479,6 +513,7 @@ export function GformTui({ onComplete }) {
           submit: mode === 'submit',
           limit: limit.trim() ? parseInt(limit.trim(), 10) : null,
           encoding: 'utf8',
+          noHeader,
           autoPageHistory: true,
           pageHistoryOverride: '',
           confirm: true,
@@ -624,6 +659,11 @@ export function GformTui({ onComplete }) {
           BoxPanel, { title: 'Options', theme },
           React.createElement(Text, { dimColor: true, marginBottom: 1 }, 'Atur opsi tambahan (opsional)'),
           React.createElement(InputField, { label: 'Limit baris', value: limit, onChange: setLimit, onSubmit: () => setStep('confirm'), placeholder: 'kosongkan untuk semua', focus: true, theme }),
+          React.createElement(
+            Box, { paddingLeft: 2, marginTop: 1 },
+            React.createElement(Text, { color: noHeader ? theme.warning : theme.dim }, `${noHeader ? '●' : '○'} --no-header `),
+            React.createElement(Text, { dimColor: true }, '(tekan n untuk toggle)'),
+          ),
           React.createElement(Text, { dimColor: true, paddingLeft: 2, marginTop: 1 }, 'Enter untuk lanjut →  b untuk kembali'),
         )
       : null,
@@ -639,6 +679,7 @@ export function GformTui({ onComplete }) {
             React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { bold: true }, 'Mode      '), React.createElement(Text, { color: mode === 'submit' ? theme.error : theme.success, bold: true }, mode.toUpperCase())),
             React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { bold: true }, 'Limit     '), React.createElement(Text, { color: theme.warning }, limit || 'semua baris')),
             React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { bold: true }, 'Rows      '), React.createElement(Text, { color: theme.info }, csvStatus?.ok ? `${csvStatus.lines?.length || '?'} baris` : '-')),
+            React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { bold: true }, 'Header    '), React.createElement(Text, { color: noHeader ? theme.warning : theme.success }, noHeader ? 'NO HEADER (positional)' : 'WITH HEADER (name match)')),
             React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { bold: true }, 'Theme     '), React.createElement(Text, { color: theme.logo[0] }, theme.name)),
           ),
           React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { color: mode === 'submit' ? theme.error : theme.success, bold: true }, mode === 'submit' ? '⚠ Mode SUBMIT akan mengirim data ke Google Form' : '✓ Mode DRY RUN — aman, tidak mengirim data')),

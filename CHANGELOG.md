@@ -1,3 +1,14 @@
+## v1.11.0 (2026-06-14)
+### Fixed
+- **Multi-select payload**: Checkbox grid values (e.g. "Kolom 1, Kolom 2") now submit correctly with duplicate keys
+- **CSV tanpa header**: `--no-header` flag untuk CSV tanpa header row, positional mapping ke form fields
+- **Preview table**: Tabel CSV dengan kolom aligned, scrolling (↑↓), dan show all (a)
+
+### Improved
+- Auto-detect CSV tanpa header dengan warning
+- Better error messages dengan tip `--no-header`
+- `buildPayload` returns pairs array (supports duplicate keys for multi-select)
+
 ## v1.10.0 (2026-06-14)
 ### Fixed
 - **Name-based header matching**: CSV headers matched to form fields by name, not position

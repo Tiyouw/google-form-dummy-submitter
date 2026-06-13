@@ -34,7 +34,7 @@ test('GformTui renders header with logo', () => {
 test('GformTui renders version in header', () => {
   const { lastFrame } = render(React.createElement(GformTui));
   const output = lastFrame();
-  assert.match(output, /v1.10.0/);
+  assert.match(output, /v1.11.0/);
 });
 
 test('CLI --help prints usage and key options', () => {
@@ -57,5 +57,5 @@ test('CLI --version prints version', () => {
   });
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /1.10.0/);
+  assert.match(result.stdout, /1.11.0/);
 });

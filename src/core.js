@@ -247,7 +247,51 @@ export function parseCsv(csvText) {
   return { headers, rows: objects };
 }
 
-export function selectCsvHeaders(csvHeaders, fields) {
+
+
+export function detectNoHeader(csvText) {
+  const text = String(csvText ?? '').replace(/^\uFEFF/, '');
+  const firstLine = text.split('\n')[0]?.trim() ?? '';
+  if (!firstLine) return false;
+
+  // Heuristics: first row looks like data, not headers
+  const cols = firstLine.split(',').map(c => c.trim());
+
+  // Check if first column looks like a timestamp
+  const firstCol = cols[0] ?? '';
+  const looksLikeTimestamp = /\d{1,2}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}/.test(firstCol);
+
+  // Check if most columns are short data values (not descriptive labels)
+  const shortDataCount = cols.filter(c => c.length < 30 && !/\s/.test(c)).length;
+  const mostlyShort = shortDataCount > cols.length * 0.5;
+
+  // Check if no column looks like a descriptive header (no spaces, all short)
+  const descriptiveCount = cols.filter(c => c.length > 15 && /\s/.test(c)).length;
+  const noDescriptive = descriptiveCount === 0;
+
+  return looksLikeTimestamp || (mostlyShort && noDescriptive);
+}
+
+export function selectCsvHeaders(csvHeaders, fields, options = {}) {
+  const { noHeader = false } = options;
+
+  // If noHeader mode, use form field titles as headers (positional mapping)
+  if (noHeader) {
+    // Remove timestamp column if present
+    let headers = csvHeaders;
+    if (headers.length === fields.length + 1) {
+      headers = headers.slice(1);
+    }
+    if (headers.length !== fields.length) {
+      throw new Error(
+        `Jumlah kolom CSV (${headers.length}) tidak sama dengan jumlah input Form (${fields.length}). `
+          + 'Dengan --no-header, kolom pertama diabaikan jika berupa Timestamp.'
+      );
+    }
+    // Return form field titles as headers (positional mapping)
+    return fields.map(f => f.title);
+  }
+
   // Remove timestamp column if present
   let headers = csvHeaders;
   if (headers.length === fields.length + 1 && TIMESTAMP_HEADERS.has(normalizeText(headers[0]))) {
@@ -258,16 +302,16 @@ export function selectCsvHeaders(csvHeaders, fields) {
   if (headers.length === fields.length) {
     try {
       const mapping = matchHeadersByTitle(headers, fields);
-      return mapping; // Returns headers reordered to match form fields
+      return mapping;
     } catch {
-      // Fallback: return as-is (positional matching)
       return headers;
     }
   }
 
   throw new Error(
     `Jumlah kolom CSV (${headers.length}) tidak sama dengan jumlah input Form (${fields.length}). `
-      + 'CSV harus punya header sesuai pertanyaan form. Kolom Timestamp di awal akan diabaikan otomatis.',
+      + 'CSV harus punya header sesuai pertanyaan form. Kolom Timestamp di awal akan diabaikan otomatis.'
+      + '\nTip: Jika CSV tidak punya header, gunakan --no-header atau tambahkan header manual.'
   );
 }
 
@@ -307,11 +351,12 @@ export function valueForField(row, header, field) {
 
 export function buildPayload(row, headers, fields, hidden, options = {}) {
   const { pageHistory = null, namePrefix = '' } = options;
-  const payload = {};
+  // Use array of [key, value] pairs to support duplicate keys (multi-select)
+  const pairs = [];
   const notes = [];
 
   for (const [key, value] of Object.entries(hidden)) {
-    if (!key.startsWith('__')) payload[key] = value;
+    if (!key.startsWith('__')) pairs.push([key, value]);
   }
 
   const partialAnswers = [];
@@ -320,28 +365,32 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
     if (index === 0 && namePrefix) value = `${namePrefix}${value}`;
     if (field.required && !value) throw new Error(`Field wajib kosong: ${JSON.stringify(field.title)}`);
 
-    // Handle multi-select: array of values
+    // Handle multi-select: array of values → duplicate keys
     if (Array.isArray(value)) {
       for (const v of value) {
-        payload[field.entryName] = v;
-        if (field.options.length) payload[field.sentinelName] ??= '';
+        pairs.push([field.entryName, v]);
       }
+      if (field.options.length) pairs.push([field.sentinelName, '']);
     } else {
-      payload[field.entryName] = value;
-      if (field.options.length) payload[field.sentinelName] ??= '';
+      pairs.push([field.entryName, value]);
+      if (field.options.length) pairs.push([field.sentinelName, '']);
     }
     partialAnswers.push([null, field.entryId, Array.isArray(value) ? value : [value], 0]);
     if (note) notes.push(note);
   });
 
-  payload.pageHistory = pageHistory || hidden.__inferred_page_history || hidden.pageHistory || '0';
-  if (payload.fbzx) payload.partialResponse = JSON.stringify([partialAnswers, null, payload.fbzx]);
+  const pageHistValue = pageHistory || hidden.__inferred_page_history || hidden.pageHistory || '0';
+  pairs.push(['pageHistory', pageHistValue]);
+  const fbzxPair = pairs.find(([k]) => k === 'fbzx');
+  if (fbzxPair) {
+    pairs.push(['partialResponse', JSON.stringify([partialAnswers, null, fbzxPair[1]])]);
+  }
 
-  return { payload, notes };
+  return { payload: pairs, notes };
 }
 
 export function validateRows(csvHeaders, rows, fields, hidden, options = {}) {
-  const selectedHeaders = selectCsvHeaders(csvHeaders, fields);
+  const selectedHeaders = selectCsvHeaders(csvHeaders, fields, { noHeader: options.noHeader });
 
   // Validate that each header matches its corresponding field
   const mismatches = [];
@@ -393,6 +442,8 @@ export async function submitOne(actionUrl, payload, referer, options = {}) {
   const { timeout = 30_000 } = options;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
+  // payload can be array of [key, value] pairs (supports duplicate keys)
+  const params = Array.isArray(payload) ? new URLSearchParams(payload) : new URLSearchParams(payload);
   try {
     const response = await fetch(actionUrl, {
       method: 'POST',
@@ -404,7 +455,7 @@ export async function submitOne(actionUrl, payload, referer, options = {}) {
         origin: 'https://docs.google.com',
         'content-type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams(payload),
+      body: params,
     });
     const text = await response.text();
     const successMarkers = [
