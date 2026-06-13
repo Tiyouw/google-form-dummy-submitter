@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -229,46 +229,44 @@ function CsvPreview({ rows, theme }) {
   useInput(
     (input, key) => {
       if (key.upArrow) setScrollOffset(o => Math.max(0, o - 1));
-      else if (key.downArrow) setScrollOffset(o => Math.min(Math.max(0, rows.length - 2), o + 1));
+      else if (key.downArrow) setScrollOffset(o => Math.min(Math.max(0, (rows?.length || 1) - 2), o + 1));
       else if (input === 'a' || input === 'A') setShowAll(!showAll);
     },
     { isActive: true },
   );
 
   if (!rows || rows.length === 0) return null;
-  const headers = rows[0]?.split(',') || [];
+  const headers = rows[0]?.split(',').map(h => h.trim()) || [];
   const allDataRows = rows.slice(1);
-  const maxColWidth = 18;
-  const colWidths = headers.map((h, i) => {
-    const headerLen = Math.min(h.trim().length, maxColWidth);
-    const maxDataLen = allDataRows.reduce((max, row) => {
-      const val = (row.split(',')[i] || '').trim();
-      return Math.max(max, Math.min(val.length, maxColWidth));
-    }, 0);
-    return Math.max(headerLen, maxDataLen, 8) + 2;
-  });
 
-  const truncate = (s, w) => {
-    const t = s.trim();
-    return t.length > w - 2 ? t.slice(0, w - 3) + '…' : t.padEnd(w);
+  // Limit to 8 columns max, truncate header names
+  const maxCols = Math.min(headers.length, 8);
+  const displayHeaders = headers.slice(0, maxCols).map(h => h.length > 14 ? h.slice(0, 12) + '..' : h);
+  const colWidth = 14;
+
+  const truncate = (s) => {
+    const t = String(s ?? '').trim();
+    return t.length > colWidth ? t.slice(0, colWidth - 2) + '..' : t;
   };
 
   const visibleRows = showAll ? allDataRows : allDataRows.slice(scrollOffset, scrollOffset + 5);
+  const headerLine = displayHeaders.map(h => h.padEnd(colWidth)).join('');
+  const separator = displayHeaders.map(() => '─'.repeat(colWidth)).join('');
 
   return React.createElement(
     Box, { flexDirection: 'column', paddingLeft: 2, marginTop: 1 },
-    React.createElement(Text, { bold: true, color: theme.warning }, `📋 Preview CSV (${allDataRows.length} baris):`),
-    React.createElement(Text, { dimColor: true }, headers.map((h, i) => truncate(h, colWidths[i])).join('')),
-    React.createElement(Text, { dimColor: true }, colWidths.map(w => '─'.repeat(w)).join('')),
+    React.createElement(Text, { bold: true, color: theme.warning }, `📋 Preview CSV (${allDataRows.length} rows):`),
+    React.createElement(Text, { color: theme.info, bold: true }, headerLine),
+    React.createElement(Text, { dimColor: true }, separator),
     ...visibleRows.map((row, i) => {
-      const cols = row.split(',').map((c, j) => truncate(c, colWidths[j]));
+      const cols = row.split(',').slice(0, maxCols).map(c => truncate(c).padEnd(colWidth));
       return React.createElement(Text, { key: i, color: 'white' }, cols.join(''));
     }),
     !showAll && allDataRows.length > 5
-      ? React.createElement(Text, { dimColor: true, italic: true }, `  ... ${allDataRows.length - 5} baris lagi (↑↓ scroll · a untuk show all)`)
+      ? React.createElement(Text, { dimColor: true, italic: true, marginTop: 0 }, `  ↑↓ scroll · a show all (${allDataRows.length - 5} more rows)`)
       : null,
     showAll
-      ? React.createElement(Text, { dimColor: true, italic: true }, '  a untuk collapse')
+      ? React.createElement(Text, { dimColor: true, italic: true }, '  a to collapse')
       : null,
   );
 }

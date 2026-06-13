@@ -1,3 +1,9 @@
+## v1.12.0 (2026-06-14)
+### Fixed
+- **CRITICAL: Submit 400 error** — Date/Time fields now use correct format (year/month/day and hour/minute)
+- **Duplicate payload entries** — Skip sentinel, pageHistory, partialResponse from hidden inputs (we generate ourselves)
+- **Clean preview table** — Max 8 columns, 14-char width, scrolling, show all
+
 ## v1.11.0 (2026-06-14)
 ### Fixed
 - **Multi-select payload**: Checkbox grid values (e.g. "Kolom 1, Kolom 2") now submit correctly with duplicate keys

@@ -349,14 +349,58 @@ export function valueForField(row, header, field) {
   throw new Error(`Nilai opsi tidak valid untuk field ${JSON.stringify(field.title)}: ${JSON.stringify(rawValue)}. Opsi valid: ${JSON.stringify(field.options)}`);
 }
 
+
+
+function parseDateValue(rawValue) {
+  // Handle formats: "6/14/2026", "2026-06-14", "14/06/2026", etc.
+  const str = String(rawValue ?? '').trim();
+  if (!str) return null;
+
+  // Try MM/DD/YYYY or M/D/YYYY
+  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return { month: m[1], day: m[2], year: m[3] };
+
+  // Try YYYY-MM-DD
+  m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return { year: m[1], month: m[2], day: m[3] };
+
+  // Try DD/MM/YYYY
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return { day: m[1], month: m[2], year: m[3] };
+
+  return null;
+}
+
+function parseTimeValue(rawValue) {
+  // Handle formats: "12:12:00 PM", "12:12 PM", "14:30", etc.
+  const str = String(rawValue ?? '').trim();
+  if (!str) return null;
+
+  // Try HH:MM:SS AM/PM
+  let m = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (m) {
+    let hour = parseInt(m[1], 10);
+    const minute = m[2];
+    const ampm = (m[3] || '').toUpperCase();
+    if (ampm === 'PM' && hour < 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+    return { hour: String(hour), minute };
+  }
+
+  return null;
+}
+
 export function buildPayload(row, headers, fields, hidden, options = {}) {
   const { pageHistory = null, namePrefix = '' } = options;
   // Use array of [key, value] pairs to support duplicate keys (multi-select)
   const pairs = [];
   const notes = [];
 
+  // Keys we generate ourselves — don't include from hidden inputs
   for (const [key, value] of Object.entries(hidden)) {
-    if (!key.startsWith('__')) pairs.push([key, value]);
+    if (!key.startsWith('__') && !key.endsWith('_sentinel') && key !== 'pageHistory' && key !== 'partialResponse' && key !== 'submissionTimestamp') {
+      pairs.push([key, value]);
+    }
   }
 
   const partialAnswers = [];
@@ -365,17 +409,41 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
     if (index === 0 && namePrefix) value = `${namePrefix}${value}`;
     if (field.required && !value) throw new Error(`Field wajib kosong: ${JSON.stringify(field.title)}`);
 
+    // Handle date fields (itemType 9): split into year/month/day
+    if (field.itemType === 9) {
+      const dateParts = parseDateValue(value);
+      if (dateParts) {
+        pairs.push([`${field.entryName}_year`, dateParts.year]);
+        pairs.push([`${field.entryName}_month`, dateParts.month]);
+        pairs.push([`${field.entryName}_day`, dateParts.day]);
+      } else {
+        pairs.push([field.entryName, value]);
+      }
+      partialAnswers.push([null, field.entryId, [value], 0]);
+    }
+    // Handle time fields (itemType 10): split into hour/minute
+    else if (field.itemType === 10) {
+      const timeParts = parseTimeValue(value);
+      if (timeParts) {
+        pairs.push([`${field.entryName}_hour`, timeParts.hour]);
+        pairs.push([`${field.entryName}_minute`, timeParts.minute]);
+      } else {
+        pairs.push([field.entryName, value]);
+      }
+      partialAnswers.push([null, field.entryId, [value], 0]);
+    }
     // Handle multi-select: array of values → duplicate keys
-    if (Array.isArray(value)) {
+    else if (Array.isArray(value)) {
       for (const v of value) {
         pairs.push([field.entryName, v]);
       }
       if (field.options.length) pairs.push([field.sentinelName, '']);
+      partialAnswers.push([null, field.entryId, Array.isArray(value) ? value : [value], 0]);
     } else {
       pairs.push([field.entryName, value]);
       if (field.options.length) pairs.push([field.sentinelName, '']);
+      partialAnswers.push([null, field.entryId, [value], 0]);
     }
-    partialAnswers.push([null, field.entryId, Array.isArray(value) ? value : [value], 0]);
     if (note) notes.push(note);
   });
 

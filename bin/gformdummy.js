@@ -13,7 +13,7 @@ import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 
 const HELP = `Google Form Dummy Submitter
 
