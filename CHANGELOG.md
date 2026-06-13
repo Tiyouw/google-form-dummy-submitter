@@ -1,3 +1,15 @@
+## v1.10.0 (2026-06-14)
+### Fixed
+- **Name-based header matching**: CSV headers matched to form fields by name, not position
+- **Multi-select support**: Comma-separated checkbox values (e.g. "Kolom 1, Kolom 2") handled correctly
+- **Header detection**: Warning when CSV first row looks like data, not header
+- **Preview timing**: CSV preview now shows reliably before mode selection
+- **Back from error**: Tekan `r` untuk kembali ke awal setelah error (tidak harus keluar)
+
+### Improved
+- Partial header matching: "Petak Kotak Centang [Baris 1]" matches "Petak Kotak Centang"
+- Better error messages with full field/header comparison
+
 # Changelog
 
 ## v1.9.0 (2026-06-10)

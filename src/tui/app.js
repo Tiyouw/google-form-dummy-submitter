@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -69,7 +69,23 @@ async function validateCsv(path) {
     const content = await readFile(path.trim(), 'utf8');
     const lines = content.split('\n').filter(l => l.trim());
     if (lines.length < 2) return { ok: false, msg: 'CSV harus punya minimal header + 1 baris data' };
-    return { ok: true, msg: `✓ Ditemukan ${lines.length - 1} baris data`, lines, preview: lines.slice(0, 6) };
+
+    // Detect if first row looks like data (no header)
+    const firstCols = lines[0]?.split(',') || [];
+    const looksLikeData = firstCols.some(col => /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(col)) // date patterns
+      || firstCols.every(col => /^\d+$/.test(col.trim())); // all numbers
+
+    const warning = looksLikeData
+      ? '⚠ Baris pertama terlihat seperti data, bukan header. Pastikan CSV punya header!'
+      : null;
+
+    return {
+      ok: true,
+      msg: `✓ Ditemukan ${lines.length - 1} baris data`,
+      lines,
+      preview: lines.slice(0, 6),
+      warning,
+    };
   } catch { return { ok: false, msg: 'File tidak ditemukan' }; }
 }
 
@@ -434,9 +450,16 @@ export function GformTui({ onComplete }) {
       }
 
       if (step === 'done') {
-        if (input === 'q' || key.return) {
+        if (input === 'q') {
           if (onComplete) onComplete(result);
           exit();
+        }
+        if (input === 'r' || input === 'R') {
+          setResult(null);
+          setRunProgress(null);
+          setIsRunning(false);
+          setError(null);
+          setStep('url');
         }
       }
     },
@@ -639,7 +662,7 @@ export function GformTui({ onComplete }) {
             React.createElement(Text, { color: result.ok ? theme.success : theme.error }, result.message || (result.ok ? 'Berhasil.' : 'Gagal.')),
             result.reportPath ? React.createElement(Text, { dimColor: true }, `Report: ${result.reportPath}`) : null,
           ),
-          React.createElement(Text, { dimColor: true, paddingLeft: 1 }, 'Tekan q atau Enter untuk keluar'),
+          React.createElement(Text, { dimColor: true, paddingLeft: 1 }, 'Tekan q untuk keluar · r untuk kembali ke awal'),
         )
       : null,
   );

@@ -19,6 +19,56 @@ export function normalizeText(value) {
     .toLowerCase();
 }
 
+
+export function matchHeadersByTitle(csvHeaders, fields) {
+  // Build mapping: for each CSV header, find matching form field index
+  const used = new Set();
+  const mapping = []; // mapping[formIndex] = csvHeader
+
+  // First pass: exact match
+  for (let fi = 0; fi < fields.length; fi++) {
+    const fieldTitle = normalizeText(fields[fi].title);
+    for (let ci = 0; ci < csvHeaders.length; ci++) {
+      if (used.has(ci)) continue;
+      if (normalizeText(csvHeaders[ci]) === fieldTitle) {
+        mapping[fi] = csvHeaders[ci];
+        used.add(ci);
+        break;
+      }
+    }
+  }
+
+  // Second pass: partial match (CSV header starts with form field title)
+  for (let fi = 0; fi < fields.length; fi++) {
+    if (mapping[fi]) continue;
+    const fieldTitle = normalizeText(fields[fi].title);
+    for (let ci = 0; ci < csvHeaders.length; ci++) {
+      if (used.has(ci)) continue;
+      if (normalizeText(csvHeaders[ci]).startsWith(fieldTitle)) {
+        mapping[fi] = csvHeaders[ci];
+        used.add(ci);
+        break;
+      }
+    }
+  }
+
+  // Check if all fields matched
+  const unmatched = [];
+  for (let fi = 0; fi < fields.length; fi++) {
+    if (!mapping[fi]) unmatched.push(fields[fi].title);
+  }
+  if (unmatched.length) {
+    throw new Error(
+      'Tidak bisa match CSV headers ke Form fields.\n'
+      + 'Form fields: ' + fields.map(f => f.title).join(', ') + '\n'
+      + 'CSV headers: ' + csvHeaders.join(', ') + '\n'
+      + 'Tidak cocok: ' + unmatched.join(', ')
+    );
+  }
+
+  return mapping;
+}
+
 export function decodeHtmlEntities(value) {
   return String(value ?? '')
     .replace(/&quot;/g, '"')
@@ -198,12 +248,25 @@ export function parseCsv(csvText) {
 }
 
 export function selectCsvHeaders(csvHeaders, fields) {
-  if (csvHeaders.length === fields.length) return csvHeaders;
-  if (csvHeaders.length === fields.length + 1 && TIMESTAMP_HEADERS.has(normalizeText(csvHeaders[0]))) {
-    return csvHeaders.slice(1);
+  // Remove timestamp column if present
+  let headers = csvHeaders;
+  if (headers.length === fields.length + 1 && TIMESTAMP_HEADERS.has(normalizeText(headers[0]))) {
+    headers = headers.slice(1);
   }
+
+  // If exact count match, try name-based matching to get correct order
+  if (headers.length === fields.length) {
+    try {
+      const mapping = matchHeadersByTitle(headers, fields);
+      return mapping; // Returns headers reordered to match form fields
+    } catch {
+      // Fallback: return as-is (positional matching)
+      return headers;
+    }
+  }
+
   throw new Error(
-    `Jumlah kolom CSV (${csvHeaders.length}) tidak sama dengan jumlah input Form (${fields.length}). `
+    `Jumlah kolom CSV (${headers.length}) tidak sama dengan jumlah input Form (${fields.length}). `
       + 'CSV harus punya header sesuai pertanyaan form. Kolom Timestamp di awal akan diabaikan otomatis.',
   );
 }
@@ -216,6 +279,28 @@ export function valueForField(row, header, field) {
   const normalized = normalizeText(rawValue);
   const matched = field.options.find((option) => normalizeText(option) === normalized);
   if (matched) return { value: matched, note: `${field.title}: ${JSON.stringify(rawValue).replaceAll('"', "'")} -> ${JSON.stringify(matched).replaceAll('"', "'")}` };
+
+  // Handle multi-select: comma-separated values (e.g. "Kolom 1, Kolom 2")
+  if (rawValue.includes(',')) {
+    const parts = rawValue.split(',').map(s => s.trim()).filter(Boolean);
+    const matchedParts = [];
+    const notes = [];
+    for (const part of parts) {
+      const partNorm = normalizeText(part);
+      const partMatch = field.options.find((option) => normalizeText(option) === partNorm);
+      if (partMatch) {
+        matchedParts.push(partMatch);
+      } else {
+        throw new Error(`Nilai opsi tidak valid untuk field ${JSON.stringify(field.title)}: ${JSON.stringify(part)}. Opsi valid: ${JSON.stringify(field.options)}`);
+      }
+    }
+    if (matchedParts.length > 0) {
+      return {
+        value: matchedParts, // Return as array for multi-select
+        note: `${field.title}: multi-select ${JSON.stringify(rawValue)} -> ${JSON.stringify(matchedParts)}`,
+      };
+    }
+  }
 
   throw new Error(`Nilai opsi tidak valid untuk field ${JSON.stringify(field.title)}: ${JSON.stringify(rawValue)}. Opsi valid: ${JSON.stringify(field.options)}`);
 }
@@ -235,9 +320,17 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
     if (index === 0 && namePrefix) value = `${namePrefix}${value}`;
     if (field.required && !value) throw new Error(`Field wajib kosong: ${JSON.stringify(field.title)}`);
 
-    payload[field.entryName] = value;
-    if (field.options.length) payload[field.sentinelName] ??= '';
-    partialAnswers.push([null, field.entryId, [value], 0]);
+    // Handle multi-select: array of values
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        payload[field.entryName] = v;
+        if (field.options.length) payload[field.sentinelName] ??= '';
+      }
+    } else {
+      payload[field.entryName] = value;
+      if (field.options.length) payload[field.sentinelName] ??= '';
+    }
+    partialAnswers.push([null, field.entryId, Array.isArray(value) ? value : [value], 0]);
     if (note) notes.push(note);
   });
 
@@ -249,11 +342,15 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
 
 export function validateRows(csvHeaders, rows, fields, hidden, options = {}) {
   const selectedHeaders = selectCsvHeaders(csvHeaders, fields);
-  const mismatches = [];
 
+  // Validate that each header matches its corresponding field
+  const mismatches = [];
   selectedHeaders.forEach((header, index) => {
     const field = fields[index];
-    if (normalizeText(header) !== normalizeText(field.title)) {
+    const hNorm = normalizeText(header);
+    const fNorm = normalizeText(field.title);
+    // Allow exact match or partial match (header starts with field title)
+    if (hNorm !== fNorm && !hNorm.startsWith(fNorm)) {
       mismatches.push(`#${index + 1}: CSV=${JSON.stringify(header)} | Form=${JSON.stringify(field.title)}`);
     }
   });
