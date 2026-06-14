@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.19.0';
+const VERSION = '1.20.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const MAPPINGS_DIR = join(homedir(), '.gformdummy', 'mappings');
@@ -402,6 +402,8 @@ export function GformTui({ onComplete }) {
   const [savedMapping, setSavedMapping] = useState(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [runStats, setRunStats] = useState(null);
+  const [toolResult, setToolResult] = useState(null);
+  const [toolRunning, setToolRunning] = useState(false);
 
   const theme = getTheme(themeName);
 
@@ -412,6 +414,7 @@ export function GformTui({ onComplete }) {
     { key: 'mode', label: 'Mode' },
     { key: 'options', label: 'Options' },
     { key: 'confirm', label: 'Confirm' },
+    { key: 'tools', label: 'Tools' },
   ];
 
   // Load config + history + csv files on mount
@@ -465,6 +468,18 @@ export function GformTui({ onComplete }) {
     (input, key) => {
       if (key.ctrl && input === 'c') { exit(); return; }
       if (step === 'init') return;
+
+      // Tools menu toggle
+      if (input === 'x' || input === 'X') {
+        if (step === 'tools') {
+          setStep('url');
+          setToolResult(null);
+        } else {
+          setStep('tools');
+          setToolResult(null);
+        }
+        return;
+      }
 
       // Theme picker toggle
       if (input === 't' && !['done', 'confirm'].includes(step)) {
@@ -523,6 +538,12 @@ export function GformTui({ onComplete }) {
         if (input === 'b') setStep('options');
       }
 
+      if (step === 'tools') {
+        if (input === '1') handleTemplate();
+        if (input === '2') handleGenerate();
+        if (input === '3') handleDoctor();
+      }
+
       if (step === 'done') {
         if (input === 'q') {
           if (onComplete) onComplete(result);
@@ -539,6 +560,86 @@ export function GformTui({ onComplete }) {
     },
     { isActive: isRawModeSupported },
   );
+
+
+
+  // Tool action handlers
+  const handleTemplate = useCallback(async () => {
+    if (!formUrl.trim()) { setToolResult({ ok: false, message: 'Form URL wajib diisi dulu' }); return; }
+    setToolRunning(true);
+    setToolResult(null);
+    try {
+      const { fields } = await fetchForm(formUrl.trim(), { timeout: 30_000 });
+      const headers = ['Timestamp', ...fields.map(f => f.title)];
+      const example = fields.map(f => {
+        if (f.options.length > 0) return f.options[0];
+        if (f.itemType === 9) return '6/14/2026';
+        if (f.itemType === 10) return '12:00:00 PM';
+        if (f.itemType === 1) return 'Contoh jawaban';
+        return 'Contoh';
+      });
+      const csv = headers.join(',') + '\n' + ['6/14/2026 12:00:00', ...example].join(',') + '\n';
+      const outPath = 'template.csv';
+      await writeFile(outPath, csv, 'utf8');
+      setToolResult({ ok: true, message: `Template saved: ${outPath}\n${fields.length} fields detected` });
+    } catch (e) { setToolResult({ ok: false, message: e.message }); }
+    setToolRunning(false);
+  }, [formUrl]);
+
+  const handleGenerate = useCallback(async () => {
+    if (!formUrl.trim()) { setToolResult({ ok: false, message: 'Form URL wajib diisi dulu' }); return; }
+    setToolRunning(true);
+    setToolResult(null);
+    try {
+      const { fields } = await fetchForm(formUrl.trim(), { timeout: 30_000 });
+      const ID_NAMES = ['Ahmad', 'Budi', 'Citra', 'Dewi', 'Eko', 'Fitri', 'Gilang'];
+      const randomFrom = arr => arr[Math.floor(Math.random() * arr.length)];
+      const rows = 10;
+      const headers = ['Timestamp', ...fields.map(f => f.title)];
+      const csvRows = [];
+      for (let i = 0; i < rows; i++) {
+        const vals = [new Date().toLocaleString('en-US')];
+        for (const f of fields) {
+          if (f.options.length > 0) vals.push(randomFrom(f.options));
+          else if (f.itemType === 9) vals.push('6/14/2026');
+          else if (f.itemType === 10) vals.push('12:00:00 PM');
+          else if (f.title.toLowerCase().includes('nama')) vals.push(randomFrom(ID_NAMES));
+          else vals.push('Contoh ' + (i + 1));
+        }
+        csvRows.push(vals.map(v => String(v).includes(',') ? '"' + v + '"' : v).join(','));
+      }
+      const outPath = 'dummy.csv';
+      await writeFile(outPath, headers.join(',') + '\n' + csvRows.join('\n') + '\n', 'utf8');
+      setToolResult({ ok: true, message: `Dummy data saved: ${outPath}\n${rows} rows, ${fields.length} fields` });
+    } catch (e) { setToolResult({ ok: false, message: e.message }); }
+    setToolRunning(false);
+  }, [formUrl]);
+
+  const handleDoctor = useCallback(async () => {
+    setToolRunning(true);
+    setToolResult(null);
+    const checks = [];
+    try {
+      const resp = await fetch('https://www.google.com', { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+      checks.push('✓ Internet OK');
+    } catch { checks.push('✗ No internet'); }
+    checks.push('✓ Node.js ' + process.version);
+    if (formUrl.trim()) {
+      try {
+        const { fields } = await fetchForm(formUrl.trim(), { timeout: 15_000 });
+        checks.push('✓ Form OK: ' + fields.length + ' fields');
+      } catch (e) { checks.push('✗ Form: ' + e.message); }
+    }
+    if (csvPath.trim()) {
+      try {
+        const csvText = await readFile(csvPath.trim(), 'utf8');
+        const { rows } = parseCsv(csvText);
+        checks.push('✓ CSV OK: ' + rows.length + ' rows');
+      } catch (e) { checks.push('✗ CSV: ' + e.message); }
+    }
+    setToolResult({ ok: checks.every(c => c.startsWith('✓')), message: checks.join('\n') });
+    setToolRunning(false);
+  }, [formUrl, csvPath]);
 
   const handleRun = useCallback(async () => {
     setIsRunning(true);
@@ -732,6 +833,37 @@ export function GformTui({ onComplete }) {
           ),
           React.createElement(Box, { paddingLeft: 1 }, React.createElement(Text, { color: mode === 'submit' ? theme.error : theme.success, bold: true }, mode === 'submit' ? '⚠ Mode SUBMIT akan mengirim data ke Google Form' : '✓ Mode DRY RUN — aman, tidak mengirim data')),
           React.createElement(Text, { dimColor: true, paddingLeft: 1, marginTop: 1 }, 'Enter untuk menjalankan  b untuk kembali'),
+        )
+      : null,
+
+
+    // Tools menu
+    step === 'tools'
+      ? React.createElement(
+          BoxPanel, { title: '🛠️ Tools (x to close)', theme },
+          React.createElement(Text, { dimColor: true, marginBottom: 1 }, 'Pilih tool yang ingin dijalankan:'),
+          React.createElement(
+            Box, { flexDirection: 'column', paddingLeft: 2 },
+            React.createElement(Text, { color: theme.info, bold: true }, '[1] Template   Generate CSV template dari form'),
+            React.createElement(Text, { color: theme.info, bold: true }, '[2] Generate   Generate dummy data (10 rows)'),
+            React.createElement(Text, { color: theme.info, bold: true }, '[3] Doctor     Cek environment & form'),
+          ),
+          formUrl.trim()
+            ? React.createElement(Text, { dimColor: true, paddingLeft: 2, marginTop: 1 }, `Form: ${formUrl.trim().slice(0, 60)}...`)
+            : React.createElement(Text, { color: theme.warning, paddingLeft: 2, marginTop: 1 }, '⚠ Isi Form URL dulu untuk pakai tools'),
+          toolRunning
+            ? React.createElement(Box, { paddingLeft: 2, marginTop: 1 }, React.createElement(Spinner, { text: 'Running...', theme }))
+            : null,
+          toolResult
+            ? React.createElement(
+                Box, { flexDirection: 'column', paddingLeft: 2, marginTop: 1 },
+                React.createElement(Text, { color: toolResult.ok ? theme.success : theme.error, bold: true }, toolResult.ok ? '✓ Result:' : '✗ Error:'),
+                ...toolResult.message.split('\n').map((line, i) =>
+                  React.createElement(Text, { key: i, color: toolResult.ok ? 'white' : theme.error }, `  ${line}`)
+                ),
+              )
+            : null,
+          React.createElement(Text, { dimColor: true, paddingLeft: 2, marginTop: 1 }, 'Press 1/2/3 to run · x to close'),
         )
       : null,
 

@@ -17,7 +17,7 @@ import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 import { THEMES, THEME_NAMES } from '../src/themes.js';
 
-const VERSION = '1.19.0';
+const VERSION = '1.20.0';
 
 const HELP = `Google Form Dummy Submitter
 

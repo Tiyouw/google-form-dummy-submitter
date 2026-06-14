@@ -1,3 +1,11 @@
+## v1.20.0 (2026-06-14)
+### Added
+- **Tools menu di TUI**: Tekan `x` dari step manapun untuk akses:
+  - [1] Template: Generate CSV template dari form
+  - [2] Generate: Generate dummy data (10 rows)
+  - [3] Doctor: Cek environment & form
+- Semua fitur sekarang bisa diakses dari TUI, tidak perlu hafal CLI flags
+
 ## v1.19.0 (2026-06-14)
 ### Added
 - **Field mapping**: `--mapping mapping.json` untuk custom mapping CSV headers ke form fields
