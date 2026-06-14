@@ -1,3 +1,21 @@
+## v1.19.0 (2026-06-14)
+### Added
+- **Field mapping**: `--mapping mapping.json` untuk custom mapping CSV headers ke form fields
+- **Mapping storage**: Auto-save di `~/.gformdummy/mappings/` per form
+- **Enhanced doctor**: More checks (required fields, option validation, unsupported fields)
+- **JSON output**: `gformdummy doctor --json` untuk CI integration
+
+### Doctor Checks
+- Node.js version
+- Package version
+- Internet connection
+- Config/reports directory
+- Form accessible + metadata
+- Required fields detected
+- Header matching result
+- Option value validation
+- Unsupported field detection
+
 ## v1.16.0 (2026-06-14)
 ### Added
 - **Dummy generator**: `gformdummy generate --form-url URL --rows 50` — generate valid dummy CSV from form

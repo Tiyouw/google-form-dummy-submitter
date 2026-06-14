@@ -272,8 +272,38 @@ export function detectNoHeader(csvText) {
   return looksLikeTimestamp || (mostlyShort && noDescriptive);
 }
 
+
+export function applyMapping(csvHeaders, fields, mapping) {
+  // mapping: { csvHeader: formFieldTitle }
+  // Returns: array of form field titles in order of form fields
+  // For each form field, find the CSV header that maps to it
+
+  const result = [];
+  const usedCsvHeaders = new Set();
+
+  for (const field of fields) {
+    // Find CSV header that maps to this field
+    let found = null;
+    for (const [csvHeader, formTitle] of Object.entries(mapping)) {
+      if (normalizeText(formTitle) === normalizeText(field.title) && !usedCsvHeaders.has(csvHeader)) {
+        found = csvHeader;
+        usedCsvHeaders.add(csvHeader);
+        break;
+      }
+    }
+    result.push(found || field.title); // fallback to field title
+  }
+
+  return result;
+}
+
 export function selectCsvHeaders(csvHeaders, fields, options = {}) {
-  const { noHeader = false } = options;
+  const { noHeader = false, mapping = null } = options;
+
+  // If mapping is provided, apply it
+  if (mapping) {
+    return applyMapping(csvHeaders, fields, mapping);
+  }
 
   // If noHeader mode, use form field titles as headers (positional mapping)
   if (noHeader) {
@@ -479,7 +509,7 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
 }
 
 export function validateRows(csvHeaders, rows, fields, hidden, options = {}) {
-  const selectedHeaders = selectCsvHeaders(csvHeaders, fields, { noHeader: options.noHeader });
+  const selectedHeaders = selectCsvHeaders(csvHeaders, fields, { noHeader: options.noHeader, mapping: options.mapping });
 
   // Validate that each header matches its corresponding field
   const mismatches = [];

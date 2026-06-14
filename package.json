@@ -1,6 +1,6 @@
 {
   "name": "gformdummy",
-  "version": "1.16.0",
+  "version": "1.19.0",
   "description": "Submit dummy CSV responses to owned public Google Forms for QA/testing.",
   "type": "module",
   "bin": {

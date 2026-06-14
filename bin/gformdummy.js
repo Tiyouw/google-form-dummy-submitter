@@ -7,6 +7,7 @@ import {
   buildPayload,
   fetchForm,
   parseCsv,
+  selectCsvHeaders,
   submitOne,
   validateRows,
 } from '../src/core.js';
@@ -16,7 +17,7 @@ import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 import { THEMES, THEME_NAMES } from '../src/themes.js';
 
-const VERSION = '1.16.0';
+const VERSION = '1.19.0';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -79,6 +80,9 @@ function parseArgs(argv) {
     theme: 'sunset',
     retry: 3,
     stopOnError: false,
+    mapping: null,
+    map: false,
+    json: false,
     argvLength: argv.length,
   };
 
@@ -99,6 +103,8 @@ function parseArgs(argv) {
     '--rows',
     '--out',
     '--locale',
+    '--mapping',
+    '--json',
   ]);
 
   function setValue(key, value) {
@@ -118,6 +124,7 @@ function parseArgs(argv) {
       case '--rows': args.rows = Number.parseInt(value, 10); break;
       case '--out': args.out = value; break;
       case '--locale': args.locale = value; break;
+      case '--mapping': args.mapping = value; break;
       default: throw new Error(`Unknown option: ${key}`);
     }
   }
@@ -131,6 +138,8 @@ function parseArgs(argv) {
     else if (token === '--interactive') args.interactive = true;
     else if (token === '--no-header') args.noHeader = true;
     else if (token === '--stop-on-error') args.stopOnError = true;
+    else if (token === '--map') args.map = true;
+    else if (token === '--json') args.json = true;
     else if (token === '--no-auto-page-history') args.autoPageHistory = false;
     else if (token.includes('=') && token.startsWith('--')) {
       const [key, ...rest] = token.split('=');
@@ -172,6 +181,17 @@ function sleep(ms) {
 }
 
 async function runCore(config, onProgress = null) {
+  // Load mapping file if provided
+  let mapping = null;
+  if (config.mapping) {
+    try {
+      const mappingText = await readFile(config.mapping, 'utf8');
+      mapping = JSON.parse(mappingText);
+    } catch (e) {
+      throw new Error(`Cannot read mapping file: ${config.mapping} — ${e.message}`);
+    }
+  }
+
   const csvText = await readFile(config.csvPath, config.encoding);
   const { headers: csvHeaders, rows } = parseCsv(csvText);
   const { fields, hidden } = await fetchForm(config.formUrl, {
@@ -181,7 +201,7 @@ async function runCore(config, onProgress = null) {
 
   const pageHistory = config.pageHistoryOverride || hidden.__inferred_page_history || hidden.pageHistory;
   const { selectedHeaders, normalizationCount } = validateRows(csvHeaders, rows, fields, hidden, {
-    pageHistory, noHeader: config.noHeader,
+    pageHistory, noHeader: config.noHeader, mapping,
   });
 
   const startIndex = (config.start || 1) - 1;
@@ -430,72 +450,169 @@ async function runTemplate(args) {
   return 0;
 }
 
+async function ensureDir(dir) {
+  try { await mkdir(dir, { recursive: true }); } catch {}
+}
+
 async function runDoctor(args) {
   const checks = [];
+  const warnings = [];
+  const errors = [];
 
-  // 1. Node version
-  checks.push({ name: 'Node.js version', ok: true, detail: process.version });
-
-  // 2. Internet connection
-  try {
-    const resp = await fetch('https://www.google.com', { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-    checks.push({ name: 'Internet connection', ok: resp.ok, detail: `HTTP ${resp.status}` });
-  } catch (e) {
-    checks.push({ name: 'Internet connection', ok: false, detail: e.message });
+  function addCheck(name, status, message) {
+    const entry = { name, status, message };
+    checks.push(entry);
+    if (status === 'warn') warnings.push(entry);
+    if (status === 'error') errors.push(entry);
   }
 
-  // 3. Google Form accessible
+  // 1. Node version
+  addCheck('Node.js version', 'pass', process.version);
+
+  // 2. Package version
+  addCheck('gformdummy version', 'pass', VERSION);
+
+  // 3. Internet connection
+  try {
+    const resp = await fetch('https://www.google.com', { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    addCheck('Internet connection', 'pass', 'Available');
+  } catch (e) {
+    addCheck('Internet connection', 'error', e.message);
+  }
+
+  // 4. Config directory
+  try {
+    const configDir = join(homedir(), '.gformdummy');
+    await mkdir(configDir, { recursive: true });
+    addCheck('Config directory', 'pass', configDir);
+  } catch (e) {
+    addCheck('Config directory', 'error', e.message);
+  }
+
+  // 5. Reports directory
+  try {
+    await ensureDir(join(homedir(), '.gformdummy', 'reports'));
+    addCheck('Reports directory', 'pass', join(homedir(), '.gformdummy', 'reports'));
+  } catch (e) {
+    addCheck('Reports directory', 'error', e.message);
+  }
+
+  // 6. Form checks
+  let formFields = null;
   if (args.formUrl) {
     try {
       const { fields, hidden } = await fetchForm(args.formUrl, { timeout: 15_000 });
-      checks.push({ name: 'Form accessible', ok: true, detail: `${fields.length} fields found` });
-      checks.push({ name: 'Form metadata', ok: true, detail: `Action URL: ${hidden.__action_url?.slice(0, 60)}...` });
+      formFields = fields;
+      addCheck('Form accessible', 'pass', `${fields.length} fields found`);
+
+      // Check for unsupported field types
+      const unsupported = fields.filter(f => ![0, 1, 2, 3, 4, 5, 7, 9, 10, 18].includes(f.itemType));
+      if (unsupported.length > 0) {
+        addCheck('Unsupported fields', 'warn', unsupported.map(f => `${f.title} (type ${f.itemType})`).join(', '));
+      }
+
+      // Count required fields
+      const required = fields.filter(f => f.required);
+      addCheck('Required fields', 'pass', `${required.length} required: ${required.map(f => f.title).join(', ')}`);
+
     } catch (e) {
-      checks.push({ name: 'Form accessible', ok: false, detail: e.message });
+      addCheck('Form accessible', 'error', e.message);
     }
   } else {
-    checks.push({ name: 'Form accessible', ok: null, detail: 'Skipped (no --form-url)' });
+    addCheck('Form accessible', 'skip', 'No --form-url provided');
   }
 
-  // 4. CSV file valid
+  // 7. CSV checks
   if (args.csv) {
     try {
-      const csvText = await readFile(args.csv, 'utf8');
+      const csvText = await readFile(args.csv, args.encoding || 'utf8');
       const { headers, rows } = parseCsv(csvText);
-      checks.push({ name: 'CSV file', ok: true, detail: `${headers.length} columns, ${rows.length} rows` });
-      checks.push({ name: 'CSV encoding', ok: true, detail: 'UTF-8' });
+      addCheck('CSV file', 'pass', `${headers.length} columns, ${rows.length} rows`);
 
-      // Check if form is provided, validate match
-      if (args.formUrl) {
+      // Check header matching if form is available
+      if (formFields) {
         try {
-          const { fields } = await fetchForm(args.formUrl, { timeout: 15_000 });
-          const matchable = Math.min(headers.length, fields.length);
-          checks.push({ name: 'CSV-Form match', ok: true, detail: `${matchable} columns matchable` });
-        } catch {}
+          const selectedHeaders = selectCsvHeaders(headers, formFields, { noHeader: args.noHeader });
+          addCheck('Header matching', 'pass', `${selectedHeaders.length}/${formFields.length} fields matched`);
+
+          // Check unmapped columns
+          if (headers.length > formFields.length) {
+            addCheck('Extra CSV columns', 'warn', `${headers.length - formFields.length} extra columns`);
+          }
+
+          // Check required fields
+          const required = formFields.filter(f => f.required);
+          for (const f of required) {
+            const idx = formFields.indexOf(f);
+            const hasData = rows.some(row => String(row[selectedHeaders[idx]] ?? '').trim().length > 0);
+            if (!hasData) {
+              addCheck(`Required field: ${f.title}`, 'error', 'No data in any row');
+            }
+          }
+
+          // Sample option validation (first 3 rows)
+          let optionIssues = 0;
+          for (let i = 0; i < Math.min(3, rows.length); i += 1) {
+            const row = rows[i];
+            formFields.forEach((f, fi) => {
+              if (!f.options.length) return;
+              const val = String(row[selectedHeaders[fi]] ?? '').trim();
+              if (!val) return;
+              const parts = val.includes(',') ? val.split(',').map(s => s.trim()) : [val];
+              for (const part of parts) {
+                const normalized = part.toLowerCase().replace(/\s+/g, ' ').trim();
+                const match = f.options.find(o => o.toLowerCase().replace(/\s+/g, ' ').trim() === normalized);
+                if (!match) optionIssues += 1;
+              }
+            });
+          }
+          if (optionIssues > 0) {
+            addCheck('Option values', 'warn', `${optionIssues} potential invalid options in first 3 rows`);
+          } else {
+            addCheck('Option values', 'pass', 'All sampled values valid');
+          }
+
+        } catch (e) {
+          addCheck('Header matching', 'error', e.message);
+        }
       }
     } catch (e) {
-      checks.push({ name: 'CSV file', ok: false, detail: e.message });
+      addCheck('CSV file', 'error', e.message);
     }
   } else {
-    checks.push({ name: 'CSV file', ok: null, detail: 'Skipped (no --csv)' });
+    addCheck('CSV file', 'skip', 'No --csv provided');
   }
 
-  // 5. Package version
-  checks.push({ name: 'Package version', ok: true, detail: VERSION });
-
-  // Print results
-  console.log('gformdummy doctor\n');
-  const maxName = Math.max(...checks.map(c => c.name.length));
-  for (const check of checks) {
-    const icon = check.ok === true ? '✓' : check.ok === false ? '✗' : '○';
-    const color = check.ok === true ? '\x1b[32m' : check.ok === false ? '\x1b[31m' : '\x1b[33m';
-    console.log(`  ${color}${icon}\x1b[0m ${check.name.padEnd(maxName + 2)} ${check.detail}`);
+  // Output
+  if (args.json) {
+    console.log(JSON.stringify({
+      ok: errors.length === 0,
+      checks,
+      warnings: warnings.length,
+      errors: errors.length,
+    }, null, 2));
+  } else {
+    console.log('gformdummy doctor\n');
+    const maxName = Math.max(...checks.map(c => c.name.length));
+    for (const check of checks) {
+      const icon = check.status === 'pass' ? '\x1b[32m✓\x1b[0m' : check.status === 'error' ? '\x1b[31m✗\x1b[0m' : check.status === 'warn' ? '\x1b[33m!\x1b[0m' : '\x1b[33m○\x1b[0m';
+      console.log(`  ${icon} ${check.name.padEnd(maxName + 2)} ${check.message}`);
+    }
+    console.log();
+    if (errors.length > 0) {
+      console.log(`Errors: ${errors.length}`);
+      errors.forEach(e => console.log(`  ✗ ${e.name}: ${e.message}`));
+    }
+    if (warnings.length > 0) {
+      console.log(`Warnings: ${warnings.length}`);
+      warnings.forEach(w => console.log(`  ! ${w.name}: ${w.message}`));
+    }
+    if (errors.length === 0 && warnings.length === 0) {
+      console.log('No issues found.');
+    }
   }
 
-  const hasErrors = checks.some(c => c.ok === false);
-  console.log();
-  console.log(hasErrors ? 'Some checks failed. Fix the issues above.' : 'All checks passed!');
-  return hasErrors ? 1 : 0;
+  return errors.length > 0 ? 1 : 0;
 }
 
 
@@ -726,6 +843,8 @@ async function main() {
     start: args.start,
     retry: args.retry,
     stopOnError: args.stopOnError,
+    mapping: args.mapping,
+    map: args.map,
   };
 
   const result = await runCore(config);

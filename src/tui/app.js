@@ -6,9 +6,10 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.16.0';
+const VERSION = '1.19.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
+const MAPPINGS_DIR = join(homedir(), '.gformdummy', 'mappings');
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 // ── Helpers ──
@@ -336,6 +337,41 @@ function ThemePicker({ themes, selectedIndex, onSelect, focus, theme }) {
   );
 }
 
+
+
+// ── Mapping helpers ──
+
+function extractFormId(formUrl) {
+  const m = formUrl.match(/\/d\/e\/([^/]+)/);
+  return m ? m[1].slice(0, 12) : 'unknown';
+}
+
+async function loadMapping(formUrl) {
+  try {
+    const formId = extractFormId(formUrl);
+    const files = await readdir(MAPPINGS_DIR);
+    const match = files.find(f => f.startsWith(formId));
+    if (match) {
+      const data = JSON.parse(await readFile(join(MAPPINGS_DIR, match), 'utf8'));
+      return data.mapping || null;
+    }
+  } catch {}
+  return null;
+}
+
+async function saveMapping(formUrl, mapping) {
+  await ensureDir(MAPPINGS_DIR);
+  const formId = extractFormId(formUrl);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const file = join(MAPPINGS_DIR, `${formId}-${ts}.json`);
+  await writeFile(file, JSON.stringify({
+    formUrl,
+    createdAt: new Date().toISOString(),
+    mapping,
+  }, null, 2), 'utf8');
+  return file;
+}
+
 // ── Main TUI Component ──
 
 export function GformTui({ onComplete }) {
@@ -362,6 +398,8 @@ export function GformTui({ onComplete }) {
   const [themeName, setThemeName] = useState('sunset');
   const [themeIndex, setThemeIndex] = useState(0);
   const [noHeader, setNoHeader] = useState(false);
+  const [mapping, setMapping] = useState(null);
+  const [savedMapping, setSavedMapping] = useState(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [runStats, setRunStats] = useState(null);
 
@@ -385,6 +423,9 @@ export function GformTui({ onComplete }) {
     ]).then(([cfg, hist, csvs]) => {
       setHistory(hist);
       setCsvFiles(csvs);
+      // Load saved mapping for this form
+      // Will be loaded when form URL is set
+
       if (cfg.theme) {
         setThemeName(cfg.theme);
         setThemeIndex(THEME_NAMES.indexOf(cfg.theme));
@@ -514,6 +555,7 @@ export function GformTui({ onComplete }) {
           limit: limit.trim() ? parseInt(limit.trim(), 10) : null,
           encoding: 'utf8',
           noHeader,
+          mapping: mapping || savedMapping || null,
           autoPageHistory: true,
           pageHistoryOverride: '',
           confirm: true,
