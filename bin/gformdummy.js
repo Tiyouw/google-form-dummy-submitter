@@ -16,7 +16,7 @@ import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 import { THEMES, THEME_NAMES } from '../src/themes.js';
 
-const VERSION = '1.14.0';
+const VERSION = '1.16.0';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -25,6 +25,7 @@ Usage:
   gformdummy --form-url URL --csv PATH [options]   CLI mode
   gformdummy template --form-url URL [--out file.csv]  Generate CSV template
   gformdummy doctor [--form-url URL] [--csv PATH]      Check environment
+  gformdummy generate --form-url URL [--rows N] [--out data.csv] [--locale id]
 
 Safety:
   Default mode is dry-run. Add --submit to actually send responses.
@@ -95,6 +96,9 @@ function parseArgs(argv) {
     '--preview-rows',
     '--theme',
     '--retry',
+    '--rows',
+    '--out',
+    '--locale',
   ]);
 
   function setValue(key, value) {
@@ -111,6 +115,9 @@ function parseArgs(argv) {
       case '--name-prefix': args.namePrefix = value; break;
       case '--preview-rows': args.previewRows = Number.parseInt(value, 10); break;
       case '--retry': args.retry = Number.parseInt(value, 10); break;
+      case '--rows': args.rows = Number.parseInt(value, 10); break;
+      case '--out': args.out = value; break;
+      case '--locale': args.locale = value; break;
       default: throw new Error(`Unknown option: ${key}`);
     }
   }
@@ -491,10 +498,173 @@ async function runDoctor(args) {
   return hasErrors ? 1 : 0;
 }
 
+
+// Indonesian dummy data
+const ID_NAMES = ['Ahmad', 'Budi', 'Citra', 'Dewi', 'Eko', 'Fitri', 'Gilang', 'Hani', 'Indra', 'Joko', 'Kartika', 'Lestari', 'Maya', 'Nanda', 'Omar', 'Putri', 'Rizki', 'Sari', 'Tono', 'Ulya', 'Vina', 'Wahyu', 'Xena', 'Yoga', 'Zahra'];
+const ID_CITIES = ['Jakarta', 'Bandung', 'Surabaya', 'Yogyakarta', 'Semarang', 'Malang', 'Medan', 'Makassar', 'Denpasar', 'Bogor', 'Depok', 'Tangerang', 'Bekasi', 'Solo', 'Palembang'];
+const ID_DIVISIONS = ['BPH', 'PSDM', 'HUMAS', 'KOMINFO', 'ACARA', 'DANUS', 'KESEKRETARIATAN'];
+const DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com', 'student.university.ac.id'];
+
+function randomFrom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomDate() {
+  const month = randomInt(1, 12);
+  const day = randomInt(1, 28);
+  return `${month}/${day}/2026`;
+}
+
+function randomTime() {
+  const hour = randomInt(8, 22);
+  const minute = randomInt(0, 59);
+  return `${hour}:${String(minute).padStart(2, '0')}:00 PM`;
+}
+
+function randomPhone() {
+  return '08' + randomInt(1000000000, 9999999999);
+}
+
+function randomEmail(name) {
+  const clean = name.toLowerCase().replace(/\s+/g, '.');
+  return clean + randomInt(1, 999) + '@' + randomFrom(DOMAINS);
+}
+
+function generateValue(field, locale, rowIndex) {
+  const title = field.title.toLowerCase();
+
+  // Date
+  if (field.itemType === 9) return randomDate();
+
+  // Time
+  if (field.itemType === 10) return randomTime();
+
+  // Rating
+  if (field.itemType === 18) return String(randomInt(1, field.options.length || 5));
+
+  // Linear scale
+  if (field.itemType === 5) return String(randomInt(1, field.options.length || 5));
+
+  // Checkbox grid / checkbox: pick random options
+  if ((field.itemType === 7 || field.itemType === 4) && field.options.length >= 2) {
+    const count = randomInt(1, Math.min(2, field.options.length));
+    const shuffled = [...field.options].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count).join(', ');
+  }
+
+  // Dropdown/Radio with options: pick random option
+  if (field.options.length > 0) return randomFrom(field.options);
+
+  // Smart name detection (only for text fields without options)
+  if (title.includes('nama') || title === 'name') {
+    return locale === 'id' ? randomFrom(ID_NAMES) : 'User ' + (rowIndex + 1);
+  }
+
+  // Email
+  if (title.includes('email') || title.includes('e-mail')) {
+    const name = locale === 'id' ? randomFrom(ID_NAMES) : 'User' + (rowIndex + 1);
+    return randomEmail(name);
+  }
+
+  // Phone
+  if (title.includes('phone') || title.includes('hp') || title.includes('wa') || title.includes('telepon') || title.includes('nomor')) {
+    return randomPhone();
+  }
+
+  // City/Location
+  if (title.includes('kota') || title.includes('city') || title.includes('alamat') || title.includes('address')) {
+    return locale === 'id' ? randomFrom(ID_CITIES) : 'City ' + (rowIndex + 1);
+  }
+
+  // Division/Department
+  if (title.includes('divisi') || title.includes('department') || title.includes('jurusan')) {
+    return randomFrom(ID_DIVISIONS);
+  }
+
+  // Link/URL
+  if (title.includes('link') || title.includes('url') || title.includes('video')) {
+    return 'https://drive.google.com/file/d/' + randomFrom(ID_NAMES).toLowerCase() + '/view';
+  }
+
+  // Paragraph
+  if (field.itemType === 1) {
+    const paragraphs = [
+      'Ini adalah contoh paragraf untuk testing purposes.',
+      'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+      'Data dummy untuk keperluan QA dan testing form.',
+      'Test response untuk validasi pipeline data.',
+    ];
+    return randomFrom(paragraphs);
+  }
+
+  // Default text
+  return 'Contoh ' + (rowIndex + 1);
+}
+
+async function runGenerate(args) {
+  if (!args.formUrl) {
+    console.error('ERROR: --form-url wajib diisi untuk generate');
+    console.error('Usage: gformdummy generate --form-url URL [--rows 50] [--out dummy.csv] [--locale id]');
+    return 1;
+  }
+
+  const rows = args.rows || 10;
+  const locale = args.locale || 'id';
+  const outPath = args.out || 'dummy.csv';
+
+  console.log(`Fetching form: ${args.formUrl}`);
+  const { fields } = await fetchForm(args.formUrl, { timeout: 30_000 });
+  console.log(`Found ${fields.length} fields`);
+
+  // Generate CSV
+  const headers = ['Timestamp', ...fields.map(f => f.title)];
+  const csvRows = [];
+
+  for (let i = 0; i < rows; i += 1) {
+    const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+    const values = [timestamp];
+
+    for (const field of fields) {
+      values.push(generateValue(field, locale, i));
+    }
+
+    // Handle CSV quoting for values with commas
+    const quoted = values.map(v => {
+      const str = String(v ?? '');
+      return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? '"' + str.replaceAll('"', '""') + '"'
+        : str;
+    });
+    csvRows.push(quoted.join(','));
+  }
+
+  const csvContent = headers.join(',') + '\n' + csvRows.join('\n') + '\n';
+
+  // Show preview
+  console.log(`\nGenerated ${rows} dummy rows (${locale} locale):\n`);
+  console.log(headers.join(', '));
+  console.log('─'.repeat(60));
+  for (let i = 0; i < Math.min(3, csvRows.length); i += 1) {
+    const row = csvRows[i];
+    const display = row.length > 80 ? row.slice(0, 77) + '...' : row;
+    console.log(display);
+  }
+  if (csvRows.length > 3) console.log(`... ${csvRows.length - 3} more rows`);
+
+  await writeFile(outPath, csvContent, 'utf8');
+  console.log(`\nDummy data saved to: ${outPath}`);
+  console.log(`\nTo submit: gformdummy --form-url "${args.formUrl}" --csv ${outPath} --submit`);
+  return 0;
+}
+
 async function main() {
   const updatePromise = checkForUpdate({ currentVersion: VERSION });
   const rawArgs = process.argv.slice(2);
-  const subcommand = rawArgs[0] === 'template' || rawArgs[0] === 'doctor' ? rawArgs[0] : null;
+  const subcommand = ['template', 'doctor', 'generate'].includes(rawArgs[0]) ? rawArgs[0] : null;
   const args = parseArgs(subcommand ? rawArgs.slice(1) : rawArgs);
 
   if (args.help) {
@@ -512,6 +682,9 @@ async function main() {
   }
   if (subcommand === 'doctor') {
     return runDoctor(args);
+  }
+  if (subcommand === 'generate') {
+    return runGenerate(args);
   }
 
   const shouldLaunchTui = args.argvLength === 0 || (args.interactive && !args.formUrl && !args.csv);

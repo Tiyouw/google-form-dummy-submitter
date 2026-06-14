@@ -409,8 +409,35 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
     if (index === 0 && namePrefix) value = `${namePrefix}${value}`;
     if (field.required && !value) throw new Error(`Field wajib kosong: ${JSON.stringify(field.title)}`);
 
+    // Handle checkbox (itemType 4): comma-separated → duplicate keys
+    if (field.itemType === 4 && Array.isArray(value)) {
+      for (const v of value) {
+        pairs.push([field.entryName, v]);
+      }
+      if (field.options.length) pairs.push([field.sentinelName, '']);
+      partialAnswers.push([null, field.entryId, value, 0]);
+    }
+    // Handle radio/multiple choice (itemType 3): single value
+    else if (field.itemType === 3) {
+      pairs.push([field.entryName, value]);
+      partialAnswers.push([null, field.entryId, [value], 0]);
+    }
+    // Handle checkbox grid (itemType 7): multi-select per row
+    else if (field.itemType === 7 && Array.isArray(value)) {
+      for (const v of value) {
+        pairs.push([field.entryName, v]);
+      }
+      if (field.options.length) pairs.push([field.sentinelName, '']);
+      partialAnswers.push([null, field.entryId, value, 0]);
+    }
+    // Handle radio grid (itemType 7): single value per row
+    else if (field.itemType === 7) {
+      pairs.push([field.entryName, value]);
+      if (field.options.length) pairs.push([field.sentinelName, '']);
+      partialAnswers.push([null, field.entryId, [value], 0]);
+    }
     // Handle date fields (itemType 9): split into year/month/day
-    if (field.itemType === 9) {
+    else if (field.itemType === 9) {
       const dateParts = parseDateValue(value);
       if (dateParts) {
         pairs.push([`${field.entryName}_year`, dateParts.year]);
@@ -432,14 +459,8 @@ export function buildPayload(row, headers, fields, hidden, options = {}) {
       }
       partialAnswers.push([null, field.entryId, [value], 0]);
     }
-    // Handle multi-select: array of values → duplicate keys
-    else if (Array.isArray(value)) {
-      for (const v of value) {
-        pairs.push([field.entryName, v]);
-      }
-      if (field.options.length) pairs.push([field.sentinelName, '']);
-      partialAnswers.push([null, field.entryId, Array.isArray(value) ? value : [value], 0]);
-    } else {
+    // Default: single value
+    else {
       pairs.push([field.entryName, value]);
       if (field.options.length) pairs.push([field.sentinelName, '']);
       partialAnswers.push([null, field.entryId, [value], 0]);

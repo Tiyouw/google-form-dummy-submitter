@@ -1,3 +1,16 @@
+## v1.16.0 (2026-06-14)
+### Added
+- **Dummy generator**: `gformdummy generate --form-url URL --rows 50` — generate valid dummy CSV from form
+- **Locale support**: `--locale id` for Indonesian names, cities, divisions
+- **Smart field detection**: Auto-detect field type from title (nama, email, phone, dll)
+- **Form options priority**: Generator uses actual form options first, then smart defaults
+
+## v1.15.0 (2026-06-14)
+### Added
+- **Radio/Multiple choice support**: itemType 3 — single value submission
+- **Checkbox support**: itemType 4 — comma-separated multi-select
+- **Radio grid support**: itemType 7 variant — single value per row
+
 ## v1.14.0 (2026-06-14)
 ### Added
 - **CSV template generator**: `gformdummy template --form-url URL` — generate CSV template dari form fields
