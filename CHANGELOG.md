@@ -1,3 +1,9 @@
+## v1.14.0 (2026-06-14)
+### Added
+- **CSV template generator**: `gformdummy template --form-url URL` — generate CSV template dari form fields
+- **Doctor command**: `gformdummy doctor --form-url URL --csv PATH` — cek environment, form accessible, CSV valid
+- **Enhanced dry-run report**: Field matching summary, required field check, option validation
+
 ## v1.13.0 (2026-06-14)
 ### Added
 - **Progress per-row di TUI**: Nama row, status, counter sukses/gagal/retry

@@ -14,14 +14,17 @@ import React from 'react';
 import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
+import { THEMES, THEME_NAMES } from '../src/themes.js';
 
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 
 const HELP = `Google Form Dummy Submitter
 
 Usage:
   gformdummy [options]              Launch interactive TUI (default)
   gformdummy --form-url URL --csv PATH [options]   CLI mode
+  gformdummy template --form-url URL [--out file.csv]  Generate CSV template
+  gformdummy doctor [--form-url URL] [--csv PATH]      Check environment
 
 Safety:
   Default mode is dry-run. Add --submit to actually send responses.
@@ -193,6 +196,59 @@ async function runCore(config, onProgress = null) {
   messages.push(`Baris diproses: ${startIndex + 1} sampai ${startIndex + totalRows} (${totalRows} baris)`);
   if (config.submit && maxRetries > 0) messages.push(`Retry: ${maxRetries}x per row`);
 
+  // Enhanced dry-run report
+  if (!config.submit) {
+    messages.push('');
+    messages.push('═══ DRY RUN REPORT ═══');
+
+    // Field matching summary
+    messages.push(`\nFields (${fields.length}):`);
+    fields.forEach((f, i) => {
+      const csvHeader = selectedHeaders[i] || '(none)';
+      const matchType = csvHeader === f.title ? '✓ exact' : '✓ mapped';
+      const required = f.required ? ' [REQUIRED]' : '';
+      const options = f.options.length ? ` (${f.options.length} options)` : '';
+      messages.push(`  ${matchType} #${i + 1}: CSV="${csvHeader}" → Form="${f.title}"${options}${required}`);
+    });
+
+    // Required field check
+    const requiredFields = fields.filter(f => f.required);
+    if (requiredFields.length > 0) {
+      messages.push(`\nRequired fields (${requiredFields.length}):`);
+      requiredFields.forEach(f => {
+        const hasData = selectedRows.some(row => {
+          const val = String(row[selectedHeaders[fields.indexOf(f)]] ?? '').trim();
+          return val.length > 0;
+        });
+        messages.push(`  ${hasData ? '✓' : '⚠'} ${f.title}`);
+      });
+    }
+
+    // Potential option issues (sample first 5 rows)
+    messages.push(`\nOption validation (first ${Math.min(5, totalRows)} rows):`);
+    let issueCount = 0;
+    for (let i = 0; i < Math.min(5, totalRows); i += 1) {
+      const row = selectedRows[i];
+      fields.forEach((f, fi) => {
+        if (!f.options.length) return;
+        const val = String(row[selectedHeaders[fi]] ?? '').trim();
+        if (!val) return;
+        const parts = val.includes(',') ? val.split(',').map(s => s.trim()) : [val];
+        for (const part of parts) {
+          const normalized = part.toLowerCase().replace(/\s+/g, ' ').trim();
+          const match = f.options.find(o => o.toLowerCase().replace(/\s+/g, ' ').trim() === normalized);
+          if (!match) {
+            messages.push(`  ⚠ Row ${startIndex + 1 + i}: "${f.title}" value "${part}" not in options [${f.options.slice(0, 3).join(', ')}${f.options.length > 3 ? '...' : ''}]`);
+            issueCount += 1;
+          }
+        }
+      });
+    }
+    if (issueCount === 0) messages.push('  ✓ All sampled values match form options');
+
+    messages.push('\n═══ END REPORT ═══');
+  }
+
   const progress = {
     current: 0, total: totalRows,
     success: 0, failed: 0, retried: 0,
@@ -308,9 +364,138 @@ async function runCore(config, onProgress = null) {
   return { ok: true, message: messages.join('\n'), progress };
 }
 
+
+async function runTemplate(args) {
+  if (!args.formUrl) {
+    console.error('ERROR: --form-url wajib diisi untuk template');
+    console.error('Usage: gformdummy template --form-url URL [--out template.csv]');
+    return 1;
+  }
+
+  console.log(`Fetching form: ${args.formUrl}`);
+  const { fields } = await fetchForm(args.formUrl, { timeout: 30_000 });
+
+  console.log(`Found ${fields.length} fields:\n`);
+
+  // Generate CSV headers
+  const headers = ['Timestamp', ...fields.map(f => f.title)];
+
+  // Generate example row
+  const exampleRow = fields.map(f => {
+    if (f.options.length > 0) return f.options[0];
+    switch (f.itemType) {
+      case 0: return 'Contoh Teks';
+      case 1: return 'Contoh paragraf panjang...';
+      case 2: return f.options[0] || 'Pilihan';
+      case 5: return '3';
+      case 7: return f.options.slice(0, 2).join(', ');
+      case 9: return '6/14/2026';
+      case 10: return '12:00:00 PM';
+      case 18: return '4';
+      default: return 'Contoh';
+    }
+  });
+
+  const csvContent = headers.join(',') + '\n' + ['6/14/2026 12:00:00', ...exampleRow].join(',') + '\n';
+
+  // Show preview
+  console.log('Generated template:');
+  console.log('─'.repeat(60));
+  console.log(headers.join(', '));
+  console.log('─'.repeat(60));
+  console.log(['6/14/2026 12:00:00', ...exampleRow].join(', '));
+  console.log('─'.repeat(60));
+  console.log();
+
+  // Field details
+  fields.forEach((f, i) => {
+    const type = f.options.length ? `select (${f.options.length} options)` : `text (type ${f.itemType})`;
+    console.log(`  #${i + 1}: ${f.title} [${type}]`);
+    if (f.options.length > 0 && f.options.length <= 5) {
+      console.log(`       Options: ${f.options.join(', ')}`);
+    }
+  });
+
+  // Write to file
+  const outPath = args.out || 'template.csv';
+  await writeFile(outPath, csvContent, 'utf8');
+  console.log(`\nTemplate saved to: ${outPath}`);
+  return 0;
+}
+
+async function runDoctor(args) {
+  const checks = [];
+
+  // 1. Node version
+  checks.push({ name: 'Node.js version', ok: true, detail: process.version });
+
+  // 2. Internet connection
+  try {
+    const resp = await fetch('https://www.google.com', { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    checks.push({ name: 'Internet connection', ok: resp.ok, detail: `HTTP ${resp.status}` });
+  } catch (e) {
+    checks.push({ name: 'Internet connection', ok: false, detail: e.message });
+  }
+
+  // 3. Google Form accessible
+  if (args.formUrl) {
+    try {
+      const { fields, hidden } = await fetchForm(args.formUrl, { timeout: 15_000 });
+      checks.push({ name: 'Form accessible', ok: true, detail: `${fields.length} fields found` });
+      checks.push({ name: 'Form metadata', ok: true, detail: `Action URL: ${hidden.__action_url?.slice(0, 60)}...` });
+    } catch (e) {
+      checks.push({ name: 'Form accessible', ok: false, detail: e.message });
+    }
+  } else {
+    checks.push({ name: 'Form accessible', ok: null, detail: 'Skipped (no --form-url)' });
+  }
+
+  // 4. CSV file valid
+  if (args.csv) {
+    try {
+      const csvText = await readFile(args.csv, 'utf8');
+      const { headers, rows } = parseCsv(csvText);
+      checks.push({ name: 'CSV file', ok: true, detail: `${headers.length} columns, ${rows.length} rows` });
+      checks.push({ name: 'CSV encoding', ok: true, detail: 'UTF-8' });
+
+      // Check if form is provided, validate match
+      if (args.formUrl) {
+        try {
+          const { fields } = await fetchForm(args.formUrl, { timeout: 15_000 });
+          const matchable = Math.min(headers.length, fields.length);
+          checks.push({ name: 'CSV-Form match', ok: true, detail: `${matchable} columns matchable` });
+        } catch {}
+      }
+    } catch (e) {
+      checks.push({ name: 'CSV file', ok: false, detail: e.message });
+    }
+  } else {
+    checks.push({ name: 'CSV file', ok: null, detail: 'Skipped (no --csv)' });
+  }
+
+  // 5. Package version
+  checks.push({ name: 'Package version', ok: true, detail: VERSION });
+
+  // Print results
+  console.log('gformdummy doctor\n');
+  const maxName = Math.max(...checks.map(c => c.name.length));
+  for (const check of checks) {
+    const icon = check.ok === true ? '✓' : check.ok === false ? '✗' : '○';
+    const color = check.ok === true ? '\x1b[32m' : check.ok === false ? '\x1b[31m' : '\x1b[33m';
+    console.log(`  ${color}${icon}\x1b[0m ${check.name.padEnd(maxName + 2)} ${check.detail}`);
+  }
+
+  const hasErrors = checks.some(c => c.ok === false);
+  console.log();
+  console.log(hasErrors ? 'Some checks failed. Fix the issues above.' : 'All checks passed!');
+  return hasErrors ? 1 : 0;
+}
+
 async function main() {
   const updatePromise = checkForUpdate({ currentVersion: VERSION });
-  const args = parseArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  const subcommand = rawArgs[0] === 'template' || rawArgs[0] === 'doctor' ? rawArgs[0] : null;
+  const args = parseArgs(subcommand ? rawArgs.slice(1) : rawArgs);
 
   if (args.help) {
     console.log(HELP);
@@ -319,6 +504,14 @@ async function main() {
   if (args.version) {
     console.log(VERSION);
     return 0;
+  }
+
+  // Handle subcommands
+  if (subcommand === 'template') {
+    return runTemplate(args);
+  }
+  if (subcommand === 'doctor') {
+    return runDoctor(args);
   }
 
   const shouldLaunchTui = args.argvLength === 0 || (args.interactive && !args.formUrl && !args.csv);

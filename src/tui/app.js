@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
