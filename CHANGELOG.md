@@ -1,3 +1,13 @@
+## v1.13.0 (2026-06-14)
+### Added
+- **Progress per-row di TUI**: Nama row, status, counter sukses/gagal/retry
+- **Retry failed rows**: `--retry N` (default 3) dengan exponential backoff
+- **Failed rows export**: Gagal rows otomatis tersimpan ke CSV di `~/.gformdummy/reports/`
+- **--stop-on-error**: Stop submit di baris pertama yang gagal
+
+### Fixed
+- `--retry` flag sekarang ter-pass ke config dengan benar
+
 ## v1.12.0 (2026-06-14)
 ### Fixed
 - **CRITICAL: Submit 400 error** — Date/Time fields now use correct format (year/month/day and hour/minute)

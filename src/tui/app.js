@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -363,6 +363,7 @@ export function GformTui({ onComplete }) {
   const [themeIndex, setThemeIndex] = useState(0);
   const [noHeader, setNoHeader] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [runStats, setRunStats] = useState(null);
 
   const theme = getTheme(themeName);
 
@@ -501,6 +502,7 @@ export function GformTui({ onComplete }) {
   const handleRun = useCallback(async () => {
     setIsRunning(true);
     setRunProgress('Mengambil metadata form & memvalidasi CSV...');
+    setRunStats(null);
     setError(null);
     try {
       if (onComplete) {
@@ -515,6 +517,8 @@ export function GformTui({ onComplete }) {
           autoPageHistory: true,
           pageHistoryOverride: '',
           confirm: true,
+          retry: 3,
+          stopOnError: false,
         };
 
         // Save config + theme
@@ -527,7 +531,11 @@ export function GformTui({ onComplete }) {
         });
 
         setRunProgress('Menjalankan...');
-        const runResult = await onComplete(config);
+        const onProgress = (stats) => {
+          setRunStats(stats);
+          if (stats.currentName) setRunProgress(`[${stats.current}/${stats.total}] ${stats.currentName}`);
+        };
+        const runResult = await onComplete(config, onProgress);
 
         // Save report
         const report = {
@@ -689,7 +697,21 @@ export function GformTui({ onComplete }) {
     isRunning
       ? React.createElement(
           BoxPanel, { title: '⏳ Running...', theme },
-          React.createElement(Box, { paddingLeft: 1, marginTop: 1, marginBottom: 1 }, React.createElement(Spinner, { text: runProgress || 'Memproses...', theme })),
+          React.createElement(Box, { paddingLeft: 1, marginTop: 1 }, React.createElement(Spinner, { text: runProgress || 'Memproses...', theme })),
+          runStats
+            ? React.createElement(
+                Box, { flexDirection: 'column', paddingLeft: 2, marginBottom: 1 },
+                React.createElement(
+                  Box, {},
+                  React.createElement(Text, { color: theme.success, bold: true }, `✓ ${runStats.success} `),
+                  React.createElement(Text, { color: theme.error, bold: true }, `✗ ${runStats.failed} `),
+                  runStats.retried > 0 ? React.createElement(Text, { color: theme.warning, bold: true }, `↻ ${runStats.retried} `) : null,
+                  React.createElement(Text, { dimColor: true }, `/ ${runStats.total}`),
+                ),
+                React.createElement(Text, { color: runStats.currentStatus === 'ok' ? theme.success : runStats.currentStatus === 'failed' ? theme.error : theme.info },
+                  `Status: ${runStats.currentStatus || '...'}`),
+              )
+            : null,
         )
       : null,
 

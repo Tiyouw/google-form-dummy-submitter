@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   buildPayload,
@@ -13,7 +15,7 @@ import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 
 const HELP = `Google Form Dummy Submitter
 
@@ -71,6 +73,8 @@ function parseArgs(argv) {
     previewRows: 3,
     noHeader: false,
     theme: 'sunset',
+    retry: 3,
+    stopOnError: false,
     argvLength: argv.length,
   };
 
@@ -87,6 +91,7 @@ function parseArgs(argv) {
     '--name-prefix',
     '--preview-rows',
     '--theme',
+    '--retry',
   ]);
 
   function setValue(key, value) {
@@ -102,6 +107,7 @@ function parseArgs(argv) {
       case '--page-history': args.pageHistory = value; break;
       case '--name-prefix': args.namePrefix = value; break;
       case '--preview-rows': args.previewRows = Number.parseInt(value, 10); break;
+      case '--retry': args.retry = Number.parseInt(value, 10); break;
       default: throw new Error(`Unknown option: ${key}`);
     }
   }
@@ -114,6 +120,7 @@ function parseArgs(argv) {
     else if (token === '--dry-run') args.dryRun = true;
     else if (token === '--interactive') args.interactive = true;
     else if (token === '--no-header') args.noHeader = true;
+    else if (token === '--stop-on-error') args.stopOnError = true;
     else if (token === '--no-auto-page-history') args.autoPageHistory = false;
     else if (token.includes('=') && token.startsWith('--')) {
       const [key, ...rest] = token.split('=');
@@ -147,13 +154,14 @@ function validateArgs(args) {
   assertPositiveNumber('--jitter', args.jitter);
   assertPositiveNumber('--timeout', args.timeout);
   assertPositiveNumber('--preview-rows', args.previewRows, { integer: true });
+  if (args.retry < 0 || !Number.isInteger(args.retry)) throw new Error('--retry harus integer >= 0');
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runCore(config) {
+async function runCore(config, onProgress = null) {
   const csvText = await readFile(config.csvPath, config.encoding);
   const { headers: csvHeaders, rows } = parseCsv(csvText);
   const { fields, hidden } = await fetchForm(config.formUrl, {
@@ -163,12 +171,16 @@ async function runCore(config) {
 
   const pageHistory = config.pageHistoryOverride || hidden.__inferred_page_history || hidden.pageHistory;
   const { selectedHeaders, normalizationCount } = validateRows(csvHeaders, rows, fields, hidden, {
-    pageHistory,
+    pageHistory, noHeader: config.noHeader,
   });
 
   const startIndex = (config.start || 1) - 1;
   let selectedRows = rows.slice(startIndex);
   if (config.limit != null) selectedRows = selectedRows.slice(0, config.limit);
+
+  const totalRows = selectedRows.length;
+  const maxRetries = config.retry ?? 3;
+  const stopOnError = config.stopOnError ?? false;
 
   const messages = [];
   messages.push(`OK: ${rows.length} baris CSV valid.`);
@@ -178,16 +190,33 @@ async function runCore(config) {
   if (normalizationCount) messages.push(`Catatan: ${normalizationCount} nilai opsi akan dinormalisasi.`);
   messages.push(`Mode: ${config.submit ? 'SUBMIT' : 'DRY RUN'}`);
   messages.push(`Action URL: ${hidden.__action_url}`);
-  messages.push(`Baris diproses: ${startIndex + 1} sampai ${startIndex + selectedRows.length} (${selectedRows.length} baris)`);
+  messages.push(`Baris diproses: ${startIndex + 1} sampai ${startIndex + totalRows} (${totalRows} baris)`);
+  if (config.submit && maxRetries > 0) messages.push(`Retry: ${maxRetries}x per row`);
 
-  let failures = 0;
-  for (let offset = 0; offset < selectedRows.length; offset += 1) {
+  const progress = {
+    current: 0, total: totalRows,
+    success: 0, failed: 0, retried: 0,
+    currentName: '', currentStatus: '',
+    failedRows: [],
+    done: false,
+  };
+
+  function emitProgress() {
+    if (onProgress) onProgress({ ...progress });
+  }
+
+  for (let offset = 0; offset < totalRows; offset += 1) {
     const rowNumber = startIndex + 1 + offset;
     const row = selectedRows[offset];
     const { payload, notes } = buildPayload(row, selectedHeaders, fields, hidden, {
       pageHistory,
     });
-    const name = row[selectedHeaders[0]]?.trim?.() ?? '';
+    const name = row[selectedHeaders[0]]?.trim?.() ?? `Row ${rowNumber}`;
+
+    progress.current = offset + 1;
+    progress.currentName = name;
+    progress.currentStatus = 'pending';
+    emitProgress();
 
     if (!config.submit) {
       if (offset < 3) {
@@ -196,28 +225,87 @@ async function runCore(config) {
         messages.push(`DRY row #${rowNumber}: ${JSON.stringify(name)} preview=${JSON.stringify(preview)}`);
         if (notes.length) messages.push(`  normalisasi: ${JSON.stringify(notes.slice(0, 3))}`);
       }
+      progress.currentStatus = 'dry-run';
+      progress.success += 1;
+      emitProgress();
       continue;
     }
 
-    const result = await submitOne(hidden.__action_url, payload, config.formUrl, { timeout: 30_000 });
-    if (result.ok) {
-      messages.push(`OK submit row #${rowNumber}: ${JSON.stringify(name)} status=${result.status}`);
-    } else {
-      failures += 1;
-      messages.push(`FAIL submit row #${rowNumber}: ${JSON.stringify(name)} status=${result.status}`);
-      break;
+    // Submit with retry
+    let lastResult = null;
+    let attempt = 0;
+    for (attempt = 0; attempt <= maxRetries; attempt += 1) {
+      if (attempt > 0) {
+        progress.retried += 1;
+        progress.currentStatus = `retry ${attempt}/${maxRetries}`;
+        emitProgress();
+        await sleep(1000 * attempt); // Exponential backoff
+      }
+
+      lastResult = await submitOne(hidden.__action_url, payload, config.formUrl, { timeout: 30_000 });
+      if (lastResult.ok) break;
     }
 
-    await sleep(800 + Math.random() * 400);
+    if (lastResult.ok) {
+      progress.success += 1;
+      progress.currentStatus = 'ok';
+      messages.push(`OK submit row #${rowNumber}: ${JSON.stringify(name)} status=${lastResult.status}${attempt > 0 ? ` (retry ${attempt})` : ''}`);
+    } else {
+      progress.failed += 1;
+      progress.currentStatus = 'failed';
+      progress.failedRows.push({
+        rowNumber,
+        name,
+        status: lastResult.status,
+        error: lastResult.snippet?.slice(0, 100) || 'Unknown error',
+        csvRow: row,
+      });
+      messages.push(`FAIL submit row #${rowNumber}: ${JSON.stringify(name)} status=${lastResult.status} (after ${maxRetries} retries)`);
+      if (stopOnError) {
+        messages.push('Stopping on error (--stop-on-error)');
+        break;
+      }
+    }
+    emitProgress();
+
+    const delay = (config.delay ?? 0.8) * 1000;
+    const jitter = (config.jitter ?? 0.4) * 1000;
+    await sleep(delay + Math.random() * jitter);
   }
 
-  if (config.submit && failures) {
-    messages.push(`Selesai dengan kegagalan: ${failures}`);
-    return { ok: false, message: messages.join('\n') };
+  progress.done = true;
+  emitProgress();
+
+  // Export failed rows to CSV if any
+  if (progress.failedRows.length > 0) {
+    try {
+      const reportDir = join(homedir(), '.gformdummy', 'reports');
+      await mkdir(reportDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const failedCsvPath = join(reportDir, `failed-${ts}.csv`);
+      const failedHeaders = selectedHeaders.join(',');
+      const failedLines = progress.failedRows.map(r => {
+        return selectedHeaders.map(h => {
+          const val = String(r.csvRow[h] ?? '').replaceAll('"', '""');
+          return val.includes(',') ? `"${val}"` : val;
+        }).join(',');
+      });
+      await writeFile(failedCsvPath, failedHeaders + '\n' + failedLines.join('\n'), 'utf8');
+      messages.push(`Failed rows exported: ${failedCsvPath}`);
+      progress.failedCsvPath = failedCsvPath;
+    } catch (e) {
+      messages.push(`Warning: Could not export failed rows: ${e.message}`);
+    }
   }
 
-  messages.push('Selesai.');
-  return { ok: true, message: messages.join('\n') };
+  const hasFailures = progress.failed > 0;
+  if (hasFailures) {
+    messages.push(`Selesai: ${progress.success} berhasil, ${progress.failed} gagal, ${progress.retried} retry.`);
+    return { ok: false, message: messages.join('\n'), progress };
+  }
+
+  messages.push(`Selesai: ${progress.success} berhasil.`);
+  return { ok: true, message: messages.join('\n'), progress };
 }
 
 async function main() {
@@ -248,9 +336,9 @@ async function main() {
 
     const { waitUntilExit } = render(
       React.createElement(GformTui, {
-        onComplete: async (config) => {
+        onComplete: async (config, onProgress) => {
           if (!config || !config.confirm) return null;
-          return runCore(config);
+          return runCore(config, onProgress);
         },
       }),
     );
@@ -270,6 +358,8 @@ async function main() {
     autoPageHistory: args.autoPageHistory,
     pageHistoryOverride: args.pageHistory,
     start: args.start,
+    retry: args.retry,
+    stopOnError: args.stopOnError,
   };
 
   const result = await runCore(config);
