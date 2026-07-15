@@ -1030,6 +1030,32 @@ async function main() {
   const result = await runCore(config);
   console.log(result.message);
 
+  if (args.saveProfileName && result.ok) {
+    const profile = {
+      name: args.saveProfileName,
+      formUrl: args.formUrl,
+      csvPath: args.csv,
+      mode: args.submit ? 'submit' : 'dry-run',
+      limit: args.limit,
+      start: args.start,
+      delay: args.delay,
+      jitter: args.jitter,
+      encoding: args.encoding,
+      timeout: args.timeout,
+      autoPageHistory: args.autoPageHistory,
+      pageHistoryOverride: args.pageHistory || '',
+      noHeader: args.noHeader,
+      theme: args.theme,
+      retry: args.retry,
+      stopOnError: args.stopOnError,
+      mapping: args.mapping,
+      namePrefix: args.namePrefix || '',
+      previewRows: args.previewRows,
+    };
+    await saveProfile(profile, { configPath: args.configPath });
+    console.log(`\nProfile tersimpan: ${args.saveProfileName}`);
+  }
+
   const update = await updatePromise.catch(() => null);
   const msg = formatUpdateMessage(update);
   if (msg) console.error(msg);
