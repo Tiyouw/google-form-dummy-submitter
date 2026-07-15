@@ -5,6 +5,7 @@ import { readFile, writeFile, access, readdir, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
+import { loadProfiles, saveProfile } from '../profiles.js';
 
 const VERSION = '1.20.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
@@ -272,26 +273,28 @@ function CsvPreview({ rows, theme }) {
   );
 }
 
-function SavedConfigPrompt({ configs, onSelect, onSkip, theme }) {
+function ProfilePicker({ profiles, onSelect, onSkip, theme }) {
   useInput(
     (input, key) => {
       if (input === 'n' || input === 'N') onSkip();
       const num = parseInt(input, 10);
-      if (num >= 1 && num <= configs.length) onSelect(configs[num - 1]);
+      if (num >= 1 && num <= profiles.length) onSelect(profiles[num - 1]);
     },
     { isActive: true },
   );
   return React.createElement(
-    BoxPanel, { title: '📂 Saved Configs', theme },
-    React.createElement(Text, { dimColor: true, marginBottom: 1 }, 'Pilih config tersimpan atau tekan N untuk mulai baru:'),
-    ...configs.map((cfg, i) =>
-      React.createElement(
-        Box, { key: i, paddingLeft: 2 },
-        React.createElement(Text, { color: theme.info, bold: true }, `[${i + 1}] `),
-        React.createElement(Text, { color: 'white' }, cfg.name || cfg.formUrl?.slice(0, 60) || `Config ${i + 1}`),
-      ),
-    ),
-    React.createElement(Text, { dimColor: true, paddingLeft: 2, marginTop: 1 }, 'Tekan nomor atau N untuk baru'),
+    BoxPanel, { title: '📂 Profiles', theme },
+    React.createElement(Text, { dimColor: true, marginBottom: 1 }, 'Pilih profile atau tekan N untuk mulai baru:'),
+    profiles.length === 0
+      ? React.createElement(Text, { color: theme.warning, paddingLeft: 2 }, 'Belum ada profile. Tekan N untuk mulai baru.')
+      : profiles.map((p, i) =>
+          React.createElement(
+            Box, { key: p.name, paddingLeft: 2 },
+            React.createElement(Text, { color: theme.info, bold: true }, `[${i + 1}] `),
+            React.createElement(Text, { color: 'white' }, `${p.name}  →  ${p.csvPath}  (${p.mode})`),
+          ),
+        ),
+    React.createElement(Text, { dimColor: true, paddingLeft: 2, marginTop: 1 }, 'Tekan nomor / N untuk baru'),
   );
 }
 
@@ -390,7 +393,7 @@ export function GformTui({ onComplete }) {
   const [isRunning, setIsRunning] = useState(false);
   const [runProgress, setRunProgress] = useState(null);
   const [result, setResult] = useState(null);
-  const [savedConfigs, setSavedConfigs] = useState([]);
+  const [profiles, setProfiles] = useState([]);
   const [history, setHistory] = useState([]);
   const [csvFiles, setCsvFiles] = useState([]);
   const [csvFileIndex, setCsvFileIndex] = useState(0);
@@ -404,6 +407,8 @@ export function GformTui({ onComplete }) {
   const [runStats, setRunStats] = useState(null);
   const [toolResult, setToolResult] = useState(null);
   const [toolRunning, setToolRunning] = useState(false);
+  const [saveProfileName, setSaveProfileName] = useState('');
+  const [saveProfileStatus, setSaveProfileStatus] = useState(null);
 
   const theme = getTheme(themeName);
 
@@ -417,25 +422,23 @@ export function GformTui({ onComplete }) {
     { key: 'tools', label: 'Tools' },
   ];
 
-  // Load config + history + csv files on mount
+  // Load config + history + csv files + profiles on mount
   useEffect(() => {
     Promise.all([
       loadConfig(),
       loadHistory(5),
       listCsvFiles('.'),
-    ]).then(([cfg, hist, csvs]) => {
+      loadProfiles(),
+    ]).then(([cfg, hist, csvs, profs]) => {
       setHistory(hist);
       setCsvFiles(csvs);
-      // Load saved mapping for this form
-      // Will be loaded when form URL is set
+      setProfiles(profs);
 
       if (cfg.theme) {
         setThemeName(cfg.theme);
         setThemeIndex(THEME_NAMES.indexOf(cfg.theme));
       }
-      const recent = cfg.recent || [];
-      if (recent.length > 0) {
-        setSavedConfigs(recent.slice(0, 5));
+      if (profs.length > 0) {
         setStep('init');
       } else {
         setStep('url');
@@ -554,7 +557,15 @@ export function GformTui({ onComplete }) {
           setRunProgress(null);
           setIsRunning(false);
           setError(null);
+          setSaveProfileName('');
+          setSaveProfileStatus(null);
           setStep('url');
+        }
+      }
+
+      if (step === 'save-profile') {
+        if (input === 'q') {
+          exit();
         }
       }
     },
@@ -646,6 +657,7 @@ export function GformTui({ onComplete }) {
     setRunProgress('Mengambil metadata form & memvalidasi CSV...');
     setRunStats(null);
     setError(null);
+    let runResultLocal = { ok: true, message: 'Selesai.' };
     try {
       if (onComplete) {
         const config = {
@@ -693,16 +705,19 @@ export function GformTui({ onComplete }) {
         };
         const reportPath = await saveReport(report);
 
-        setResult({ ...(runResult || { ok: true, message: 'Selesai.' }), reportPath });
+        runResultLocal = { ...(runResult || { ok: true, message: 'Selesai.' }), reportPath };
+        setResult(runResultLocal);
       } else {
-        setResult({ ok: true, message: 'Konfigurasi siap. Jalankan dari CLI.' });
+        runResultLocal = { ok: true, message: 'Konfigurasi siap. Jalankan dari CLI.' };
+        setResult(runResultLocal);
       }
     } catch (err) {
-      setResult({ ok: false, message: err.message });
+      runResultLocal = { ok: false, message: err.message };
+      setResult(runResultLocal);
     }
     setIsRunning(false);
     setRunProgress(null);
-    setStep('done');
+    setStep(runResultLocal.ok ? 'save-profile' : 'done');
   }, [formUrl, csvPath, mode, limit, themeName, csvStatus, onComplete]);
 
   if (!isRawModeSupported) {
@@ -712,11 +727,17 @@ export function GformTui({ onComplete }) {
     );
   }
 
-  const handleSelectConfig = (cfg) => {
-    if (cfg.formUrl) setFormUrl(cfg.formUrl);
-    if (cfg.csvPath) setCsvPath(cfg.csvPath);
-    if (cfg.mode) setMode(cfg.mode);
-    if (cfg.limit) setLimit(String(cfg.limit));
+  const handleSelectProfile = (profile) => {
+    if (profile.formUrl) setFormUrl(profile.formUrl);
+    if (profile.csvPath) setCsvPath(profile.csvPath);
+    setMode(profile.mode || 'dry-run');
+    setLimit(profile.limit != null ? String(profile.limit) : '');
+    setNoHeader(profile.noHeader || false);
+    if (profile.theme) {
+      setThemeName(profile.theme);
+      setThemeIndex(THEME_NAMES.indexOf(profile.theme));
+    }
+    setMapping(profile.mapping || null);
     setStep('url');
   };
 
@@ -739,8 +760,8 @@ export function GformTui({ onComplete }) {
       : null,
 
     // Init
-    step === 'init' && savedConfigs.length > 0
-      ? React.createElement(SavedConfigPrompt, { configs: savedConfigs, onSelect: handleSelectConfig, onSkip: () => setStep('url'), theme })
+    step === 'init' && profiles.length > 0
+      ? React.createElement(ProfilePicker, { profiles, onSelect: handleSelectProfile, onSkip: () => setStep('url'), theme })
       : null,
 
     // URL
@@ -886,6 +907,58 @@ export function GformTui({ onComplete }) {
                   `Status: ${runStats.currentStatus || '...'}`),
               )
             : null,
+        )
+      : null,
+
+    // Save profile after success
+    step === 'save-profile' && result
+      ? React.createElement(
+          BoxPanel, { title: 'Simpan Profile', theme },
+          React.createElement(Box, { paddingLeft: 1, marginTop: 1, marginBottom: 1, flexDirection: 'column' },
+            React.createElement(Text, { color: theme.success }, result.message || 'Berhasil.'),
+            result.reportPath ? React.createElement(Text, { dimColor: true }, `Report: ${result.reportPath}`) : null,
+            React.createElement(Text, { dimColor: true, marginTop: 1 }, 'Masukkan nama profile (kosongkan untuk tidak menyimpan):'),
+            React.createElement(InputField, {
+              label: 'Nama profile',
+              value: saveProfileName,
+              onChange: setSaveProfileName,
+              onSubmit: async () => {
+                const name = saveProfileName.trim();
+                if (!name) {
+                  setStep('done');
+                  return;
+                }
+                const profile = {
+                  name,
+                  formUrl: formUrl.trim(),
+                  csvPath: csvPath.trim(),
+                  mode,
+                  limit: limit.trim() ? parseInt(limit.trim(), 10) : null,
+                  delay: 0.8,
+                  jitter: 0.4,
+                  encoding: 'utf8',
+                  timeout: 30,
+                  autoPageHistory: true,
+                  pageHistoryOverride: '',
+                  noHeader,
+                  theme: themeName,
+                  retry: 3,
+                  stopOnError: false,
+                  mapping: mapping || savedMapping || null,
+                  namePrefix: '',
+                  previewRows: 3,
+                };
+                await saveProfile(profile, { configPath: CONFIG_PATH });
+                setProfiles(await loadProfiles());
+                setSaveProfileStatus('ok');
+                setStep('done');
+              },
+              focus: true,
+              theme,
+            }),
+            saveProfileStatus ? React.createElement(Text, { color: theme.success, marginTop: 1 }, '✓ Profile tersimpan.') : null,
+          ),
+          React.createElement(Text, { dimColor: true, paddingLeft: 1, marginTop: 1 }, 'Enter untuk simpan · kosongkan untuk skip'),
         )
       : null,
 

@@ -18,6 +18,7 @@ npm-debug.log*
 # Local data / secrets
 *.csv
 !examples/*.csv
+!test/*.csv
 .env
 *.log
 form.html
