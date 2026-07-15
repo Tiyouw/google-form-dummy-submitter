@@ -41,6 +41,39 @@ TUI akan terbuka dengan:
 - review sebelum menjalankan
 - hasil langsung di terminal
 
+### Shortcut & Tools di TUI
+
+| Tombol | Fungsi |
+|---|---|
+| `Enter` | Lanjut ke step berikutnya / konfirmasi |
+| `b` | Kembali ke step sebelumnya |
+| `↑` / `↓` | Pilih opsi / file |
+| `t` | Buka/tutup theme picker |
+| `p` | Di step CSV: beralih ke file picker |
+| `n` | Di step Options: toggle `--no-header` |
+| `x` | Buka **Tools menu** dari step mana saja |
+| `1` | Tool: Generate CSV template dari form |
+| `2` | Tool: Generate 10 baris dummy data otomatis |
+| `3` | Tool: Doctor (cek environment, form, CSV) |
+| `q` | Keluar dari result screen |
+| `r` | Kembali ke awal dari result screen |
+| `Ctrl+C` | Keluar |
+
+### Generate Dummy Data Otomatis
+
+Di TUI:
+1. Isi Form URL di step pertama.
+2. Tekan `x` → tekan `2` (Generate).
+3. File `dummy.csv` akan dibuat di direktori kerja.
+
+Atau lewat CLI:
+
+```bash
+gformdummy generate --form-url 'https://docs.google.com/forms/d/e/FORM_ID/viewform' --rows 10 --out dummy.csv
+```
+
+Contoh hasil generate mendukung opsi form, tanggal, waktu, dan nama Indonesia (`--locale id`).
+
 ### CLI Mode
 
 Langsung dari argumen:
