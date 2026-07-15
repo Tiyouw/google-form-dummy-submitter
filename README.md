@@ -73,7 +73,44 @@ gformdummy \
 - **Mode default dry-run** — aman, tidak submit tanpa konfirmasi
 - **Auto pageHistory** — menangani form multi-section
 - **Normalisasi opsi** — toleransi dash/spasi otomatis
+- **Profiles** — simpan dan muat ulang konfigurasi form dengan cepat
 - **No external API** — semua proses lokal
+
+---
+
+## Profiles
+
+Simpan konfigurasi form yang sering dipakai. Profile disimpan di `~/.gformdummy.json`.
+
+### TUI
+
+Saat TUI start, pilih profile dari daftar atau tekan `N` untuk mulai baru. Setelah run sukses, TUI akan menanyakan nama untuk menyimpan profile.
+
+### CLI
+
+```bash
+# Simpan profile baru
+gformdummy profile --save qa --form-url URL --csv data.csv
+
+# Lihat semua profile
+gformdummy profile --list
+
+# Jalankan dengan profile
+gformdummy --profile qa --dry-run
+
+# Alias melalui subcommand
+gformdummy profile --load qa --dry-run
+
+# Hapus profile
+gformdummy profile --delete qa
+
+# Simpan otomatis setelah run sukses
+gformdummy --form-url URL --csv data.csv --dry-run --save-profile qa
+```
+
+### Wizard interaktif (`--interactive`)
+
+Jalankan `gformdummy --interactive`, wizard akan menawarkan load profile di awal dan save profile di akhir.
 
 ---
 
@@ -113,8 +150,18 @@ Tips paling aman:
 | `--no-auto-page-history` | Matikan inferensi pageHistory. |
 | `--name-prefix` | Prefix field pertama. |
 | `--preview-rows` | Jumlah preview saat dry-run. |
+| `--profile <name>` | Muat profile tersimpan. |
+| `--save-profile <name>` | Simpan sebagai profile setelah run sukses. |
+| `--config <path>` | Path file config, default `~/.gformdummy.json`. |
 | `-h, --help` | Bantuan. |
 | `-v, --version` | Versi. |
+
+| Subcommand | Keterangan |
+|---|---|
+| `profile --list` | Tampilkan profile tersimpan. |
+| `profile --save <name>` | Simpan profile baru. |
+| `profile --load <name>` | Jalankan dengan profile. |
+| `profile --delete <name>` | Hapus profile. |
 
 ---
 

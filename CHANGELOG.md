@@ -1,3 +1,11 @@
+## v1.21.0 (2026-07-15)
+### Added
+- **Profiles**: simpan dan muat ulang konfigurasi form di `~/.gformdummy.json`
+  - TUI: profile picker saat start, save profile setelah run sukses
+  - CLI: `gformdummy profile --save/--load/--list/--delete`, `--profile <name>`, `--save-profile <name>`, `--config <path>`
+  - Wizard: load profile di awal, save profile di akhir
+- Explicit CLI flags selalu override nilai profile
+
 ## v1.20.0 (2026-06-14)
 ### Added
 - **Tools menu di TUI**: Tekan `x` dari step manapun untuk akses:

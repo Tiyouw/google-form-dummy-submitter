@@ -7,7 +7,7 @@ import { join, extname, basename } from 'node:path';
 import { getTheme, THEME_NAMES } from '../themes.js';
 import { loadProfiles, saveProfile } from '../profiles.js';
 
-const VERSION = '1.20.0';
+const VERSION = '1.21.0';
 const CONFIG_PATH = join(homedir(), '.gformdummy.json');
 const REPORTS_DIR = join(homedir(), '.gformdummy', 'reports');
 const MAPPINGS_DIR = join(homedir(), '.gformdummy', 'mappings');
