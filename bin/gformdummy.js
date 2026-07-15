@@ -16,6 +16,13 @@ import { render } from 'ink';
 import { GformTui } from '../src/tui/app.js';
 import { checkForUpdate, formatUpdateMessage } from '../src/update-check.js';
 import { THEMES, THEME_NAMES } from '../src/themes.js';
+import {
+  loadProfiles,
+  getProfile,
+  saveProfile,
+  deleteProfile,
+  mergeProfileWithArgs,
+} from '../src/profiles.js';
 
 const VERSION = '1.20.0';
 
@@ -27,6 +34,10 @@ Usage:
   gformdummy template --form-url URL [--out file.csv]  Generate CSV template
   gformdummy doctor [--form-url URL] [--csv PATH]      Check environment
   gformdummy generate --form-url URL [--rows N] [--out data.csv] [--locale id]
+  gformdummy profile --list                              List saved profiles
+  gformdummy profile --save <name> --form-url URL --csv PATH   Save a profile
+  gformdummy profile --load <name> [options]             Run with profile
+  gformdummy profile --delete <name>                   Delete a profile
 
 Safety:
   Default mode is dry-run. Add --submit to actually send responses.
@@ -51,6 +62,9 @@ Options:
   --preview-rows <n>     Number of rows to preview in dry-run (default: 3)
   --theme <name>         UI theme: sunset, ocean, forest, purple, matrix, monokai
   --no-header            CSV has no header row, use form field order
+  --profile <name>       Load a saved profile
+  --save-profile <name>  Save config as profile after successful run
+  --config <path>        Config file path (default ~/.gformdummy.json)
   -h, --help             Show help
   -v, --version          Show version
 
@@ -84,6 +98,11 @@ function parseArgs(argv) {
     map: false,
     json: false,
     argvLength: argv.length,
+    profileName: null,
+    saveProfileName: null,
+    deleteProfile: null,
+    listProfiles: false,
+    configPath: join(homedir(), '.gformdummy.json'),
   };
 
   const needsValue = new Set([
@@ -105,6 +124,12 @@ function parseArgs(argv) {
     '--locale',
     '--mapping',
     '--json',
+    '--profile',
+    '--save-profile',
+    '--save',
+    '--load',
+    '--delete',
+    '--config',
   ]);
 
   function setValue(key, value) {
@@ -125,6 +150,12 @@ function parseArgs(argv) {
       case '--out': args.out = value; break;
       case '--locale': args.locale = value; break;
       case '--mapping': args.mapping = value; break;
+      case '--profile': args.profileName = value; break;
+      case '--save-profile': args.saveProfileName = value; break;
+      case '--save': args.saveProfile = value; break;
+      case '--load': args.profileName = value; break;
+      case '--delete': args.deleteProfile = value; break;
+      case '--config': args.configPath = value; break;
       default: throw new Error(`Unknown option: ${key}`);
     }
   }
@@ -140,6 +171,7 @@ function parseArgs(argv) {
     else if (token === '--stop-on-error') args.stopOnError = true;
     else if (token === '--map') args.map = true;
     else if (token === '--json') args.json = true;
+    else if (token === '--list') args.listProfiles = true;
     else if (token === '--no-auto-page-history') args.autoPageHistory = false;
     else if (token.includes('=') && token.startsWith('--')) {
       const [key, ...rest] = token.split('=');
@@ -778,11 +810,125 @@ async function runGenerate(args) {
   return 0;
 }
 
+async function runProfile(args) {
+  const options = { configPath: args.configPath };
+  if (args.profileName) {
+    const profiles = await loadProfiles(options);
+    const profile = getProfile(args.profileName, profiles);
+    if (!profile) {
+      console.error(`Profile tidak ditemukan: ${args.profileName}`);
+      console.error('Jalankan: gformdummy profile --list');
+      return 1;
+    }
+    const profileArgs = {
+      formUrl: profile.formUrl,
+      csv: profile.csvPath,
+      submit: profile.mode === 'submit',
+      limit: profile.limit,
+      start: profile.start,
+      delay: profile.delay,
+      jitter: profile.jitter,
+      encoding: profile.encoding,
+      timeout: profile.timeout,
+      autoPageHistory: profile.autoPageHistory,
+      pageHistory: profile.pageHistoryOverride || undefined,
+      noHeader: profile.noHeader,
+      theme: profile.theme,
+      retry: profile.retry,
+      stopOnError: profile.stopOnError,
+      mapping: profile.mapping,
+      namePrefix: profile.namePrefix,
+      previewRows: profile.previewRows,
+    };
+    const resolvedArgs = mergeProfileWithArgs(profileArgs, args);
+    validateArgs(resolvedArgs);
+    const config = {
+      formUrl: resolvedArgs.formUrl,
+      csvPath: resolvedArgs.csv,
+      submit: resolvedArgs.submit,
+      limit: resolvedArgs.limit,
+      encoding: resolvedArgs.encoding,
+      noHeader: resolvedArgs.noHeader,
+      autoPageHistory: resolvedArgs.autoPageHistory,
+      pageHistoryOverride: resolvedArgs.pageHistory,
+      start: resolvedArgs.start,
+      retry: resolvedArgs.retry,
+      stopOnError: resolvedArgs.stopOnError,
+      mapping: resolvedArgs.mapping,
+      map: resolvedArgs.map,
+      delay: resolvedArgs.delay,
+      jitter: resolvedArgs.jitter,
+      timeout: resolvedArgs.timeout,
+    };
+    const result = await runCore(config);
+    console.log(result.message);
+    return result.ok ? 0 : 2;
+  }
+
+  if (args.listProfiles) {
+    const profiles = await loadProfiles(options);
+    if (profiles.length === 0) {
+      console.log('Belum ada profile tersimpan.');
+      console.log('Buat baru: gformdummy profile --save <nama> --form-url URL --csv PATH');
+      return 0;
+    }
+    console.log('Profile tersimpan:');
+    for (const p of profiles) {
+      console.log(`  ${p.name}: ${p.formUrl}  \u2192  ${p.csvPath}  (${p.mode})`);
+    }
+    return 0;
+  }
+
+  if (args.deleteProfile) {
+    const ok = await deleteProfile(args.deleteProfile, options);
+    if (!ok) {
+      console.error(`Profile tidak ditemukan: ${args.deleteProfile}`);
+      return 1;
+    }
+    console.log(`Profile dihapus: ${args.deleteProfile}`);
+    return 0;
+  }
+
+  if (args.saveProfile) {
+    if (!args.formUrl || !args.csv) {
+      console.error('ERROR: --form-url dan --csv wajib untuk menyimpan profile');
+      return 1;
+    }
+    const profile = {
+      name: args.saveProfile,
+      formUrl: args.formUrl,
+      csvPath: args.csv,
+      mode: args.submit ? 'submit' : 'dry-run',
+      limit: args.limit,
+      start: args.start,
+      delay: args.delay,
+      jitter: args.jitter,
+      encoding: args.encoding,
+      timeout: args.timeout,
+      autoPageHistory: args.autoPageHistory,
+      pageHistoryOverride: args.pageHistory || '',
+      noHeader: args.noHeader,
+      theme: args.theme,
+      retry: args.retry,
+      stopOnError: args.stopOnError,
+      mapping: args.mapping,
+      namePrefix: args.namePrefix || '',
+      previewRows: args.previewRows,
+    };
+    await saveProfile(profile, options);
+    console.log(`Profile tersimpan: ${args.saveProfile}`);
+    return 0;
+  }
+
+  console.error('ERROR: gunakan --list, --save <nama>, --load <nama>, atau --delete <nama>');
+  return 1;
+}
+
 async function main() {
   const updatePromise = checkForUpdate({ currentVersion: VERSION });
   const rawArgs = process.argv.slice(2);
-  const subcommand = ['template', 'doctor', 'generate'].includes(rawArgs[0]) ? rawArgs[0] : null;
-  const args = parseArgs(subcommand ? rawArgs.slice(1) : rawArgs);
+  const subcommand = ['template', 'doctor', 'generate', 'profile'].includes(rawArgs[0]) ? rawArgs[0] : null;
+  let args = parseArgs(subcommand ? rawArgs.slice(1) : rawArgs);
 
   if (args.help) {
     console.log(HELP);
@@ -802,6 +948,40 @@ async function main() {
   }
   if (subcommand === 'generate') {
     return runGenerate(args);
+  }
+  if (subcommand === 'profile') {
+    return runProfile(args);
+  }
+
+  if (args.profileName) {
+    const profiles = await loadProfiles({ configPath: args.configPath });
+    const profile = getProfile(args.profileName, profiles);
+    if (!profile) {
+      console.error(`ERROR: Profile tidak ditemukan: ${args.profileName}`);
+      console.error('Jalankan: gformdummy profile --list');
+      return 1;
+    }
+    const profileArgs = {
+      formUrl: profile.formUrl,
+      csv: profile.csvPath,
+      submit: profile.mode === 'submit',
+      limit: profile.limit,
+      start: profile.start,
+      delay: profile.delay,
+      jitter: profile.jitter,
+      encoding: profile.encoding,
+      timeout: profile.timeout,
+      autoPageHistory: profile.autoPageHistory,
+      pageHistory: profile.pageHistoryOverride || undefined,
+      noHeader: profile.noHeader,
+      theme: profile.theme,
+      retry: profile.retry,
+      stopOnError: profile.stopOnError,
+      mapping: profile.mapping,
+      namePrefix: profile.namePrefix,
+      previewRows: profile.previewRows,
+    };
+    args = mergeProfileWithArgs(profileArgs, args);
   }
 
   const shouldLaunchTui = args.argvLength === 0 || (args.interactive && !args.formUrl && !args.csv);
