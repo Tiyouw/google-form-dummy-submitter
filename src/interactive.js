@@ -9,6 +9,19 @@ import {
   selectCsvHeaders,
   validateRows,
 } from './core.js';
+import { loadProfiles, saveProfile, getProfile } from './profiles.js';
+
+function profileToDefaults(profile) {
+  return {
+    formUrl: profile.formUrl || '',
+    csvPath: profile.csvPath || '',
+    mode: profile.mode || 'dry-run',
+    limit: profile.limit != null ? String(profile.limit) : '',
+    encoding: profile.encoding || 'utf8',
+    autoPageHistory: profile.autoPageHistory !== false,
+    pageHistoryOverride: profile.pageHistoryOverride || '',
+  };
+}
 
 export function resolveRunConfig(answers) {
   const formUrl = String(answers.formUrl ?? '').trim();
@@ -108,7 +121,29 @@ export function runInteractive({ defaultFormUrl = '', defaultCsvPath = '', defau
 }
 
 export async function runWizardMain(options = {}) {
-  const answers = await runInteractive(options);
+  const profiles = await loadProfiles();
+  let defaults = { ...options };
+
+  if (profiles.length > 0) {
+    const choices = [
+      { name: 'Mulai manual (tanpa profile)', value: '' },
+      ...profiles.map((p) => ({ name: `${p.name}  →  ${p.csvPath} (${p.mode})`, value: p.name })),
+    ];
+    const { profileName } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'profileName',
+        message: 'Pilih profile tersimpan:',
+        choices,
+      },
+    ]);
+    if (profileName) {
+      const profile = getProfile(profileName, profiles);
+      if (profile) defaults = { ...defaults, ...profileToDefaults(profile) };
+    }
+  }
+
+  const answers = await runInteractive(defaults);
 
   console.log(chalk.bold('\nMengambil metadata form...'));
   const csvText = await readFile(answers.csvPath, answers.encoding);
@@ -152,6 +187,37 @@ export async function runWizardMain(options = {}) {
 
   if (!config.confirm) {
     console.log(chalk.yellow('Dibatalkan oleh user.'));
+    return config;
+  }
+
+  const { saveProfileName } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'saveProfileName',
+      message: 'Nama profile untuk disimpan (kosongkan untuk skip):',
+      default: '',
+    },
+  ]);
+
+  if (saveProfileName.trim()) {
+    await saveProfile({
+      name: saveProfileName.trim(),
+      formUrl: config.formUrl,
+      csvPath: config.csvPath,
+      mode: config.mode,
+      limit: config.limit,
+      encoding: config.encoding,
+      autoPageHistory: config.autoPageHistory,
+      pageHistoryOverride: config.pageHistoryOverride || '',
+      noHeader: false,
+      theme: 'sunset',
+      retry: 3,
+      stopOnError: false,
+      mapping: null,
+      namePrefix: '',
+      previewRows: 3,
+    });
+    console.log(chalk.green(`Profile tersimpan: ${saveProfileName.trim()}`));
   }
 
   return config;
